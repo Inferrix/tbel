@@ -40,8 +40,9 @@ public class ListCreator implements Accessor {
     for (int i = 0; i < getValues().length; i++) {
       template[i] = getValues()[i].getValue(ctx, elCtx, variableFactory);
     }
-    if (ctx instanceof ExecutionContext) {
-      return new ExecutionArrayList<>(Arrays.asList(template), (ExecutionContext) ctx);
+    ExecutionContext executionContext = ExecutionContext.of(ctx);
+    if (executionContext != null) {
+      return new ExecutionArrayList<>(Arrays.asList(template), executionContext);
     } else {
       return new ArrayList<>(Arrays.asList(template));
     }

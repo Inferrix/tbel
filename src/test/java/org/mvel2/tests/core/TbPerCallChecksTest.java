@@ -383,6 +383,166 @@ public class TbPerCallChecksTest extends TestCase {
         assertEquals(1, counter.get());
     }
 
+    // ---- addendum: the with object stays the context of a with body (names resolve as upstream), the ExecutionContext comes from the thread
+
+    public void testWithBlockResolvesWithObjectFieldsAsMethodArguments() throws Exception {
+        parserConfig.addImport("Math", Math.class);
+        assertEquals(5, run("x = {v: 5}; with (x) { r = Math.max(v, 3) }; x.r"));
+        assertEquals(3, ((String) run("x = {n: 3}; with (x) { y = 'a'.repeat(n) }; x.y")).length());
+        assertEquals("q", run("x = {a: 'q'}; with (x) { put('c', a) }; x.c"));
+    }
+
+    // the checkers still see the arguments of a with block: String.indent, String.repeat, String.format and ArrayList(int)
+    public void testWithBlockCheckersSeeResolvedArguments() throws Exception {
+        AtomicInteger counter = new AtomicInteger();
+        parserConfig.registerMethodInvocationChecker(String.class.getMethod("repeat", int.class), (ctx, target, args) -> {
+            counter.incrementAndGet();
+            if (((Number) args[0]).intValue() > 100) {
+                throw new ScriptMemoryOverflowException("repeat too large");
+            }
+            return args;
+        });
+        parserConfig.registerMethodInvocationChecker(String.class.getMethod("format", String.class, Object[].class), (ctx, target, args) -> {
+            counter.incrementAndGet();
+            if (((String) args[0]).contains("900000000")) {
+                throw new ScriptMemoryOverflowException("format too wide");
+            }
+            return args;
+        });
+        // n comes from the with object: the checker gets 1500000000, not null or an unresolved name
+        try {
+            run("x = {n: 1500000000}; with (x) { y = 'a'.repeat(n).length() }; 1");
+            fail("expected ScriptMemoryOverflowException");
+        } catch (ScriptMemoryOverflowException expected) {
+            assertEquals(1, counter.get());
+        }
+        try {
+            run("x = {}; with (x) { y = String.format('%0900000000d', 1).length() }; 1");
+            fail("expected ScriptMemoryOverflowException");
+        } catch (ScriptMemoryOverflowException expected) {
+            assertEquals(2, counter.get());
+        }
+    }
+
+    public void testNewArrayLengthIsCheckedInsideWithInlineWithAndProjection() {
+        for (String script : new String[] {
+                "x = {}; with (x) { z = new byte[2000000000] }; 1",
+                "x = {}; x.{ z = new byte[2000000000] }; 1",
+                "l = [1, 2]; (new byte[2000000000] in l)"}) {
+            try {
+                run(script);
+                fail("expected ScriptMemoryOverflowException for: " + script);
+            } catch (ScriptMemoryOverflowException expected) {
+                // refused by checkArray before the array is allocated
+            }
+        }
+        assertEquals(10, ((java.util.List<?>) run("x = {}; with (x) { z = new byte[10] }; x.z")).size());
+    }
+
+    // the with body takes expressions only (a bare while does not parse), so the loop runs in a function called from the body
+    public void testStopFlagWorksInsideAWithBody() throws Exception {
+        Serializable compiled = compileExpression("function spin() { while (true) { } return 1; } x = {}; with (x) { y = spin() }; 1");
+        ExecutionContext executionContext = new ExecutionContext(parserConfig, 8L * 1024 * 1024);
+        java.util.concurrent.atomic.AtomicReference<Throwable> thrown = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        Thread thread = new Thread(() -> {
+            try {
+                executeTbExpression(compiled, executionContext, new HashMap<String, Object>());
+            } catch (Throwable t) {
+                thrown.set(t);
+            } finally {
+                done.countDown();
+            }
+        });
+        thread.setDaemon(true);
+        thread.start();
+        Thread.sleep(200);
+        executionContext.stop();
+        boolean finished = done.await(2, java.util.concurrent.TimeUnit.SECONDS);
+        if (!finished) {
+            thread.stop();
+        }
+        assertTrue("the script did not end after stop()", finished);
+        boolean stopped = false;
+        for (Throwable t = thrown.get(); t != null; t = t.getCause()) {
+            stopped |= t instanceof org.mvel2.ScriptExecutionStoppedException;
+        }
+        assertTrue(String.valueOf(thrown.get()), stopped);
+    }
+
+    // a variable assigned in a function called from a with body is accounted against the script's memory, as at top level
+    public void testMemoryAccountingAppliesInsideAWithBody() {
+        String grow = "function grow() { t = 'abc'; for (i = 0; i < 12; i++) { t += t } return t.length(); } ";
+        try {
+            executeTbExpression(compileExpression(grow + "grow()"), new ExecutionContext(parserConfig, 2000), new HashMap<String, Object>());
+            fail("expected ScriptMemoryOverflowException at top level");
+        } catch (ScriptMemoryOverflowException expected) {
+            // the model
+        }
+        try {
+            executeTbExpression(compileExpression(grow + "x = {}; with (x) { y = grow() }; 1"), new ExecutionContext(parserConfig, 2000),
+                    new HashMap<String, Object>());
+            fail("expected ScriptMemoryOverflowException inside a with body");
+        } catch (ScriptMemoryOverflowException expected) {
+            // refused as at top level
+        }
+    }
+
+    public void testCurrentContextIsRestoredAfterEveryRun() throws Exception {
+        assertNull(ExecutionContext.of(null));
+        run("1 + 1");
+        assertNull(ExecutionContext.of(null));
+        try {
+            run("throw new RuntimeException('boom')");
+            fail("expected an exception");
+        } catch (RuntimeException expected) {
+            // thrown by the script
+        }
+        assertNull(ExecutionContext.of(null));
+        try {
+            run("'a'.nope()");
+            fail("expected an exception");
+        } catch (RuntimeException expected) {
+            // unresolvable
+        }
+        assertNull(ExecutionContext.of(null));
+        ExecutionContext outer = new ExecutionContext(parserConfig, 8L * 1024 * 1024);
+        assertSame(outer, ExecutionContext.of(outer));
+        assertNull(ExecutionContext.of("not a context"));
+    }
+
+    public void testNestedRunDoesNotReplaceTheOuterContext() throws Exception {
+        ExecutionContext outer = new ExecutionContext(parserConfig, 8L * 1024 * 1024);
+        AtomicInteger seen = new AtomicInteger();
+        java.util.List<Object> observed = new ArrayList<>();
+        parserConfig.registerMethodInvocationChecker(String.class.getMethod("repeat", int.class), (ctx, target, args) -> {
+            Serializable inner = compileExpression("'z'.toUpperCase()");
+            ExecutionContext innerCtx = new ExecutionContext(parserConfig, 8L * 1024 * 1024);
+            executeTbExpression(inner, innerCtx, new HashMap<String, Object>());
+            observed.add(ExecutionContext.of(null));
+            seen.incrementAndGet();
+            return args;
+        });
+        Object r = executeTbExpression(compileExpression("x = {}; with (x) { y = 'a'.repeat(2) }; x.y"), outer, new HashMap<String, Object>());
+        assertEquals("aa", r);
+        assertEquals(1, seen.get());
+        assertSame(outer, observed.get(0));
+        assertNull(ExecutionContext.of(null));
+    }
+
+    public static class CtxProbe {
+        public static boolean hasContext(ExecutionContext ctx, Object ignored) {
+            return ctx != null;
+        }
+    }
+
+    public void testExecutionContextParameterIsInjectedInsideAWithBody() throws Exception {
+        parserConfig.addImport("hasContext", new org.mvel2.util.MethodStub(CtxProbe.class.getMethod("hasContext", ExecutionContext.class, Object.class)));
+        assertEquals(true, run("hasContext(1)"));
+        assertEquals(true, run("x = {}; with (x) { y = hasContext(1) }; x.y"));
+        assertEquals(true, run("x = {}; x.{ y = hasContext(1) }; x.y"));
+    }
+
     // no checker is registered for String#charAt: later calls at the site take the plain Method.invoke path
     // (Character widens, Long goes through the IllegalArgumentException + coercion fallback) and still work
     public void testUncheckedMethodLongAndCharacterArgumentsOnLaterCalls() {

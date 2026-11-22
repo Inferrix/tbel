@@ -158,7 +158,7 @@ public class MethodAccessor extends InvokableAccessor {
     int paramIndex = 0;
     for (int i = 0; i < length && !(isVarargs && i >= length - 1); i++) {
       if (i == executionContextParamIndex) {
-        values[i] = elCtx instanceof ExecutionContext ? elCtx : null;
+        values[i] = ExecutionContext.of(elCtx);
       } else {
         values[i] = convert(parms[paramIndex++].getValue(elCtx, vars), target[i]);
       }
@@ -186,7 +186,7 @@ public class MethodAccessor extends InvokableAccessor {
     int paramIndex = 0;
     for (int i = 0; i < length - (m.isVarArgs() ? 1 : 0); i++) {
       if (i == this.executionContextParamIndex) {
-        vals[i] = ctx instanceof ExecutionContext ? ctx : null;
+        vals[i] = ExecutionContext.of(ctx);
       } else {
         vals[i] = parms[paramIndex++].getValue(ctx, vars);
       }

@@ -441,40 +441,46 @@ public class ASTNode implements Cloneable, Serializable {
   }
 
   protected void checkExecution(Object ctx) {
-    if (ctx instanceof ExecutionContext) {
-      ((ExecutionContext)ctx).checkExecution();
+    ExecutionContext executionContext = ExecutionContext.of(ctx);
+    if (executionContext != null) {
+      executionContext.checkExecution();
     }
   }
 
   protected void checkArray(Object ctx, Class<?> componentType, int... dimensions) {
-    if (ctx instanceof ExecutionContext) {
-      ((ExecutionContext)ctx).checkArray(componentType, dimensions);
+    ExecutionContext executionContext = ExecutionContext.of(ctx);
+    if (executionContext != null) {
+      executionContext.checkArray(componentType, dimensions);
     }
   }
 
   protected void enterStack(Object ctx) {
-    if (ctx instanceof ExecutionContext) {
-      ((ExecutionContext) ctx).enterStack();
+    ExecutionContext executionContext = ExecutionContext.of(ctx);
+    if (executionContext != null) {
+      executionContext.enterStack();
     }
   }
 
   protected void leaveStack(Object ctx) {
-    if (ctx instanceof ExecutionContext) {
-      ((ExecutionContext) ctx).leaveStack();
+    ExecutionContext executionContext = ExecutionContext.of(ctx);
+    if (executionContext != null) {
+      executionContext.leaveStack();
     }
   }
 
   protected Object checkAssignLocalVariable(Object ctx, String varName, Object value) {
-    if (ctx instanceof ExecutionContext) {
-      return ((ExecutionContext)ctx).checkAssignLocalVariable(varName, value);
+    ExecutionContext executionContext = ExecutionContext.of(ctx);
+    if (executionContext != null) {
+      return executionContext.checkAssignLocalVariable(varName, value);
     } else {
       return value;
     }
   }
 
   protected Object checkAssignGlobalVariable(Object ctx, String varName, Object value) {
-    if (ctx instanceof ExecutionContext) {
-      return ((ExecutionContext)ctx).checkAssignGlobalVariable(varName, value);
+    ExecutionContext executionContext = ExecutionContext.of(ctx);
+    if (executionContext != null) {
+      return executionContext.checkAssignGlobalVariable(varName, value);
     } else {
       return value;
     }

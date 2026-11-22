@@ -338,8 +338,9 @@ public class NewObjectNode extends ASTNode {
       for (int i = 0; i < s.length; i++) {
         s[i] = convert(sizes[i].getValue(ctx, elCtx, variableFactory), Integer.class);
       }
-      if (ctx instanceof ExecutionContext) {
-        ((ExecutionContext)ctx).checkArray(arrayType, s);
+      ExecutionContext executionContext = ExecutionContext.of(ctx);
+      if (executionContext != null) {
+        executionContext.checkArray(arrayType, s);
       }
       return newInstance(arrayType, s);
     }

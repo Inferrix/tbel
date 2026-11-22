@@ -40,8 +40,8 @@ public abstract class InvokableAccessor extends BaseAccessor {
   }
 
   protected static Object[] checkInvocation(Method method, Object ctx, Object elCtx, Object[] args) {
-    if (elCtx instanceof ExecutionContext) {
-      ExecutionContext executionContext = (ExecutionContext) elCtx;
+    ExecutionContext executionContext = ExecutionContext.of(elCtx);
+    if (executionContext != null) {
       executionContext.checkArgumentsCount(args);
       TriFunction<ExecutionContext, Object, Object[], Object[]> checker = executionContext.getMethodInvocationChecker(method);
       if (checker != null) {
@@ -52,8 +52,8 @@ public abstract class InvokableAccessor extends BaseAccessor {
   }
 
   protected static Object[] checkConstruction(Constructor<?> constructor, Object elCtx, Object[] args) {
-    if (elCtx instanceof ExecutionContext) {
-      ExecutionContext executionContext = (ExecutionContext) elCtx;
+    ExecutionContext executionContext = ExecutionContext.of(elCtx);
+    if (executionContext != null) {
       executionContext.checkArgumentsCount(args);
       TriFunction<ExecutionContext, Object, Object[], Object[]> checker = executionContext.getConstructorChecker(constructor);
       if (checker != null) {

@@ -44,7 +44,7 @@ public class FunctionAccessor extends BaseAccessor {
         parms[i] = parameters[i].getValue(ctx, elCtx, variableFactory);
       }
     }
-    ExecutionContext execCtx = ctx instanceof ExecutionContext ? (ExecutionContext)ctx : null;
+    ExecutionContext execCtx = ExecutionContext.of(ctx);
     if (nextNode != null) {
       return nextNode.getValue(function.call(ctx, execCtx, elCtx, variableFactory, parms), elCtx, variableFactory);
     }

@@ -385,7 +385,7 @@ public class ReflectiveAccessorOptimizer extends AbstractOptimizer implements Ac
 
   private Accessor compileGetChain() {
     Object curr = ctx instanceof ExecutionContext ? null : ctx;
-    ExecutionContext execCtx = ctx instanceof ExecutionContext ? (ExecutionContext)ctx : null;
+    ExecutionContext execCtx = ExecutionContext.of(ctx);
     cursor = start;
 
     try {
@@ -1440,16 +1440,18 @@ public class ReflectiveAccessorOptimizer extends AbstractOptimizer implements Ac
   }
 
   private Object[] checkConstruction(Constructor<?> constructor, Object thisRef, Object[] args) {
-    if (thisRef instanceof ExecutionContext) {
-      return ((ExecutionContext) thisRef).checkConstruction(constructor, args);
+    ExecutionContext executionContext = ExecutionContext.of(thisRef);
+    if (executionContext != null) {
+      return executionContext.checkConstruction(constructor, args);
     } else {
       return args;
     }
   }
 
   private Object[] checkInvocation(Method method, Object ctx, Object[] args) {
-    if (this.thisRef instanceof ExecutionContext) {
-      return ((ExecutionContext)this.thisRef).checkInvocation(method, ctx, args);
+    ExecutionContext executionContext = ExecutionContext.of(this.thisRef);
+    if (executionContext != null) {
+      return executionContext.checkInvocation(method, ctx, args);
     } else {
       return args;
     }

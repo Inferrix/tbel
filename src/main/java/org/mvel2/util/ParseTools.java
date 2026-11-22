@@ -333,7 +333,7 @@ public class ParseTools {
     int executionContextIndex = Arrays.asList(paramsTypes).indexOf(ExecutionContext.class);
     if (executionContextIndex > -1) {
       List<Object> newArgsList = new ArrayList<>(Arrays.asList(args));
-      newArgsList.add(executionContextIndex, ctx instanceof ExecutionContext ? ctx : null);
+      newArgsList.add(executionContextIndex, ExecutionContext.of(ctx));
       args = newArgsList.toArray();
     }
     return args;

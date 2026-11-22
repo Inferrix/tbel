@@ -43,6 +43,31 @@ public class ExecutionContext implements Serializable {
 
     private volatile boolean stopped = false;
 
+    // the context of the script running on this thread (set by MVEL.executeTbExpression); inside with blocks, x.{...} and
+    // projections the nodes get the with-object / element as ctx, not the ExecutionContext
+    private static final ThreadLocal<ExecutionContext> CURRENT = new ThreadLocal<>();
+
+    /**
+     * @return ctx if it is an ExecutionContext, else the context of the script running on this thread (null when none)
+     */
+    public static ExecutionContext of(Object ctx) {
+        return ctx instanceof ExecutionContext ? (ExecutionContext) ctx : CURRENT.get();
+    }
+
+    static ExecutionContext setCurrent(ExecutionContext ctx) {
+        ExecutionContext previous = CURRENT.get();
+        CURRENT.set(ctx);
+        return previous;
+    }
+
+    static void restoreCurrent(ExecutionContext previous) {
+        if (previous == null) {
+            CURRENT.remove();
+        } else {
+            CURRENT.set(previous);
+        }
+    }
+
     public ExecutionContext(SandboxedParserConfiguration parserConfig) {
         this(parserConfig, -1);
     }

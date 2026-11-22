@@ -946,12 +946,18 @@ public class MVEL {
   }
 
   public static Object executeTbExpression(final Object compiledExpression, final ExecutionContext ctx, Map vars) {
-    if(vars != null) {
-      Map newVars = new HashMap();
-      vars.forEach((k,v) -> newVars.put(k , ArgsRepackUtil.repack(ctx, v)));
-      vars = newVars;
+    ExecutionContext previous = ExecutionContext.setCurrent(ctx);
+    try {
+      if(vars != null) {
+        Map newVars = new HashMap();
+        vars.forEach((k,v) -> newVars.put(k , ArgsRepackUtil.repack(ctx, v)));
+        vars = newVars;
+      }
+      return ArgsRepackUtil.unpack(executeExpression(compiledExpression, ctx, vars));
     }
-    return ArgsRepackUtil.unpack(executeExpression(compiledExpression, ctx, vars));
+    finally {
+      ExecutionContext.restoreCurrent(previous);
+    }
   }
 
   public static Object executeExpression(final Object compiledExpression, final Object ctx, final VariableResolverFactory resolverFactory) {

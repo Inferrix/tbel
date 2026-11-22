@@ -40,8 +40,9 @@ public class MapCreator implements Accessor {
 
   public Object getValue(Object ctx, Object elCtx, VariableResolverFactory variableFactory) {
     Map map;
-    if (ctx instanceof ExecutionContext) {
-      map = new ExecutionHashMap(size * 2, (ExecutionContext) ctx);
+    ExecutionContext executionContext = ExecutionContext.of(ctx);
+    if (executionContext != null) {
+      map = new ExecutionHashMap(size * 2, executionContext);
     } else {
       map = new HashMap<>(size * 2);
     }

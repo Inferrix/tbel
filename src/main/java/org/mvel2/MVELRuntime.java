@@ -60,14 +60,6 @@ public class MVELRuntime {
    */
   public static Object execute(boolean debugger, final CompiledExpression expression, final Object ctx,
                                VariableResolverFactory variableFactory) {
-    return execute(debugger, expression, ctx, ctx, variableFactory);
-  }
-
-  /**
-   * @param thisValue the "this" handed to the nodes; differs from ctx for a statement run inside a with block
-   */
-  public static Object execute(boolean debugger, final CompiledExpression expression, final Object ctx,
-                               final Object thisValue, VariableResolverFactory variableFactory) {
 
     Object v1, v2;
     ExecutionStack stk = new ExecutionStack();
@@ -80,7 +72,7 @@ public class MVELRuntime {
     ASTNode node = expression.getFirstNode();
     while (node != null) {
       if (node instanceof Function) {
-        node.getReducedValueAccelerated(ctx, thisValue, variableFactory);
+        node.getReducedValueAccelerated(ctx, ctx, variableFactory);
       }
       node = node.nextASTNode;
     }
@@ -109,7 +101,7 @@ public class MVELRuntime {
           continue;
         }
         else if (stk.isEmpty()) {
-          stk.push(tk.getReducedValueAccelerated(ctx, thisValue, variableFactory));
+          stk.push(tk.getReducedValueAccelerated(ctx, ctx, variableFactory));
         }
 
         if (variableFactory.tiltFlag() || variableFactory.breakFlag()) {
@@ -150,7 +142,7 @@ public class MVELRuntime {
             continue;
         }
 
-        stk.push(tk.nextASTNode.getReducedValueAccelerated(ctx, thisValue, variableFactory), operator);
+        stk.push(tk.nextASTNode.getReducedValueAccelerated(ctx, ctx, variableFactory), operator);
 
         try {
           while (stk.isReduceable()) {
