@@ -472,6 +472,16 @@ public class TbPerCallChecksTest extends TestCase {
         assertEquals(3, ((java.util.List<?>) run("($ * 2 in l)", java.util.Collections.singletonMap("l", Arrays.asList(1, 2, 3)))).size());
     }
 
+    // a projection that returns an object array (split) works as before; the array becomes a list, as on a variable assignment
+    public void testProjectionMayReturnAnObjectArray() {
+        Map<String, Object> vars = new HashMap<String, Object>();
+        vars.put("strs", Arrays.asList("a,b", "c,d"));
+        for (String script : new String[] {"($.split(',') in strs)", "($.split(',') in strs if true)"}) {
+            java.util.List<?> result = (java.util.List<?>) run(script, vars);
+            assertEquals(script, "[[a, b], [c, d]]", result.toString());
+        }
+    }
+
     // the with body takes expressions only (a bare while does not parse), so the loop runs in a function called from the body
     public void testStopFlagWorksInsideAWithBody() throws Exception {
         Serializable compiled = compileExpression("function spin() { while (true) { } return 1; } x = {}; with (x) { y = spin() }; 1");

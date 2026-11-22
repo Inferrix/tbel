@@ -28,6 +28,7 @@ import org.mvel2.integration.impl.DefaultLocalVariableResolverFactory;
 import org.mvel2.integration.impl.ItemResolverFactory;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
@@ -92,7 +93,7 @@ public class Fold extends ASTNode {
         checkExecution(ctx);
         itemR.value = o;
         if ((Boolean) constraintEx.getValue(ctx, thisValue, itemFactory)) {
-          list.add(subEx.getValue(o, thisValue, itemFactory));
+          list.add(element(ctx, subEx.getValue(o, thisValue, itemFactory)));
         }
       }
 
@@ -102,7 +103,7 @@ public class Fold extends ASTNode {
       list = newResult(ctx, col.size());
       for (Object o : col) {
         checkExecution(ctx);
-        list.add(subEx.getValue(itemR.value = o, thisValue, itemFactory));
+        list.add(element(ctx, subEx.getValue(itemR.value = o, thisValue, itemFactory)));
       }
     }
     return list;
@@ -126,7 +127,7 @@ public class Fold extends ASTNode {
         checkExecution(ctx);
         itemR.value = o;
         if ((Boolean) constraintEx.getValue(ctx, thisValue, itemFactory)) {
-          list.add(subEx.getValue(o, thisValue, itemFactory));
+          list.add(element(ctx, subEx.getValue(o, thisValue, itemFactory)));
         }
       }
     }
@@ -140,7 +141,7 @@ public class Fold extends ASTNode {
       list = newResult(ctx, ((Collection) x).size());
       for (Object o : (Collection) x) {
         checkExecution(ctx);
-        list.add(subEx.getValue(itemR.value = o, thisValue, itemFactory));
+        list.add(element(ctx, subEx.getValue(itemR.value = o, thisValue, itemFactory)));
       }
     }
 
@@ -151,6 +152,17 @@ public class Fold extends ASTNode {
   private static List newResult(Object ctx, int size) {
     ExecutionContext executionContext = ExecutionContext.of(ctx);
     return executionContext == null ? new ArrayList(size) : new ExecutionArrayList(executionContext);
+  }
+
+  // the memory accounting has no size for an object array: it becomes a list, as on a variable assignment
+  private static Object element(Object ctx, Object value) {
+    if (value != null && value.getClass().isArray() && !value.getClass().getComponentType().isPrimitive()) {
+      ExecutionContext executionContext = ExecutionContext.of(ctx);
+      if (executionContext != null) {
+        return new ExecutionArrayList(Arrays.asList((Object[]) value), executionContext);
+      }
+    }
+    return value;
   }
 
   public Class getEgressType() {
