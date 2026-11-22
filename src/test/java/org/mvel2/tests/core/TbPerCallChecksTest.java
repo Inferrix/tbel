@@ -286,4 +286,45 @@ public class TbPerCallChecksTest extends TestCase {
             assertTrue(String.valueOf(expected.getMessage()), expected.getMessage() != null);
         }
     }
+
+    private AtomicInteger registerNoArgArrayListCounter() throws Exception {
+        AtomicInteger counter = new AtomicInteger();
+        parserConfig.registerDataType("ArrayList", ArrayList.class, list -> 8L);
+        parserConfig.registerConstructorChecker(ArrayList.class.getConstructor(), (ctx, target, args) -> {
+            counter.incrementAndGet();
+            return args;
+        });
+        return counter;
+    }
+
+    public void testNoArgConstructorCheckerRunsOnceForAScriptExecutedOnce() throws Exception {
+        AtomicInteger counter = registerNoArgArrayListCounter();
+        run("new ArrayList().size()");
+        assertEquals(1, counter.get());
+    }
+
+    public void testNoArgConstructorCheckerRunsOnEveryNewWithResidual() throws Exception {
+        AtomicInteger counter = registerNoArgArrayListCounter();
+        run("r = 0; for (i = 0; i < 3; i++) { r = new ArrayList().size() }; r");
+        assertEquals(3, counter.get());
+    }
+
+    public void testNoArgConstructorCheckerRunsOnEveryNewWithoutResidual() throws Exception {
+        AtomicInteger counter = registerNoArgArrayListCounter();
+        run("r = null; for (i = 0; i < 3; i++) { r = new ArrayList() }; r");
+        assertEquals(3, counter.get());
+    }
+
+    public void testNoArgConstructorCheckerRefusalOnFirstExecution() throws Exception {
+        parserConfig.registerDataType("ArrayList", ArrayList.class, list -> 8L);
+        parserConfig.registerConstructorChecker(ArrayList.class.getConstructor(), (ctx, target, args) -> {
+            throw new ScriptMemoryOverflowException("denied");
+        });
+        try {
+            run("new ArrayList().size()");
+            fail("expected ScriptMemoryOverflowException");
+        } catch (ScriptMemoryOverflowException expected) {
+            // refused on the first execution of the site
+        }
+    }
 }

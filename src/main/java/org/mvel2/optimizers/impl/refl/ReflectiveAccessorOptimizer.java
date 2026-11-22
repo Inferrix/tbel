@@ -1395,9 +1395,9 @@ public class ReflectiveAccessorOptimizer extends AbstractOptimizer implements Ac
       AccessorNode ca = new ConstructorAccessor(cns, null);
 
       if (cnsRes.length > 1) {
-        //noinspection NullArgumentToVariableArgMethod
+        Object[] parms = checkConstruction(cns, thisRef, new Object[0]);
         ReflectiveAccessorOptimizer compiledOptimizer
-            = new ReflectiveAccessorOptimizer(pCtx, cnsRes[1].toCharArray(), 0, cnsRes[1].length(), cns.newInstance(null), ctx, vars);
+            = new ReflectiveAccessorOptimizer(pCtx, cnsRes[1].toCharArray(), 0, cnsRes[1].length(), cns.newInstance(parms), ctx, vars);
         compiledOptimizer.setRootNode(ca);
         compiledOptimizer.compileGetChain();
         ca = compiledOptimizer.getRootNode();
