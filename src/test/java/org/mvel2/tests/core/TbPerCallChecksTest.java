@@ -163,4 +163,17 @@ public class TbPerCallChecksTest extends TestCase {
         assertEquals(1000, ((String) res).length());
         assertEquals(0, counter.get());
     }
+
+    public void testOutOfRangeNarrowingOnSecondCallStillFails() {
+        Map<String, Object> vars = new HashMap<String, Object>();
+        vars.put("v", Arrays.asList(1, 4294967297L));
+        // the same Long fails on the first call at a site (ConversionException); it must not be
+        // silently truncated to 1 on a later call
+        try {
+            Object res = run("r = ''; for (i = 0; i < 2; i++) { r = 'abcdef'.charAt(v[i]) }; r", vars);
+            fail("expected a conversion error, got " + res);
+        } catch (RuntimeException expected) {
+            assertTrue(String.valueOf(expected.getMessage()), expected.getMessage() != null);
+        }
+    }
 }

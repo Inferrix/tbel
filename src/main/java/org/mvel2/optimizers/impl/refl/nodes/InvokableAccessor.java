@@ -82,20 +82,40 @@ public abstract class InvokableAccessor extends BaseAccessor {
     return converted != null ? converted : args;
   }
 
+  /**
+   * Java's primitive widening only (Character/Byte/Short/Integer/Long/Float to a wider primitive), which is what
+   * Method.invoke accepts without a conversion. Narrowing is never done here: DataConversion refuses an out of
+   * range value on purpose, and the IllegalArgumentException + coercion path must keep reporting it.
+   */
   private static Object widenToPrimitive(Object arg, Class<?> type) {
     if (!type.isPrimitive()) {
       return arg;
     }
-    Number n = arg instanceof Character ? Integer.valueOf((Character) arg) : arg instanceof Number ? (Number) arg : null;
-    if (n == null) {
-      return arg;
+    if (arg instanceof Character) {
+      char c = (Character) arg;
+      if (type == int.class) return (int) c;
+      if (type == long.class) return (long) c;
+      if (type == float.class) return (float) c;
+      if (type == double.class) return (double) c;
+    } else if (arg instanceof Byte || arg instanceof Short) {
+      Number n = (Number) arg;
+      if (type == short.class && arg instanceof Byte) return n.shortValue();
+      if (type == int.class) return n.intValue();
+      if (type == long.class) return n.longValue();
+      if (type == float.class) return n.floatValue();
+      if (type == double.class) return n.doubleValue();
+    } else if (arg instanceof Integer) {
+      int n = (Integer) arg;
+      if (type == long.class) return (long) n;
+      if (type == float.class) return (float) n;
+      if (type == double.class) return (double) n;
+    } else if (arg instanceof Long) {
+      long n = (Long) arg;
+      if (type == float.class) return (float) n;
+      if (type == double.class) return (double) n;
+    } else if (arg instanceof Float) {
+      if (type == double.class) return (double) (Float) arg;
     }
-    if (type == int.class) return n.intValue();
-    if (type == long.class) return n.longValue();
-    if (type == short.class) return n.shortValue();
-    if (type == byte.class) return n.byteValue();
-    if (type == float.class) return n.floatValue();
-    if (type == double.class) return n.doubleValue();
     return arg;
   }
 
