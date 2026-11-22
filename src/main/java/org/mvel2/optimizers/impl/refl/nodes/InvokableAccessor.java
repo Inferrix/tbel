@@ -43,6 +43,7 @@ public abstract class InvokableAccessor extends BaseAccessor {
     ExecutionContext executionContext = ExecutionContext.of(elCtx);
     if (executionContext != null) {
       executionContext.checkArgumentsCount(args);
+      executionContext.checkPlainOperands(ctx, args);
       TriFunction<ExecutionContext, Object, Object[], Object[]> checker = executionContext.getMethodInvocationChecker(method);
       if (checker != null) {
         return checker.apply(executionContext, ctx, convertToParameterTypes(method.getParameterTypes(), method.isVarArgs(), args));
@@ -55,6 +56,7 @@ public abstract class InvokableAccessor extends BaseAccessor {
     ExecutionContext executionContext = ExecutionContext.of(elCtx);
     if (executionContext != null) {
       executionContext.checkArgumentsCount(args);
+      executionContext.checkConstructorArguments(args);
       TriFunction<ExecutionContext, Object, Object[], Object[]> checker = executionContext.getConstructorChecker(constructor);
       if (checker != null) {
         return checker.apply(executionContext, null, convertToParameterTypes(constructor.getParameterTypes(), constructor.isVarArgs(), args));

@@ -297,16 +297,16 @@ public class ExecutionContext implements Serializable {
      * A plain java.util collection, map or array (List.of, Arrays.asList, a copy such as new ArrayList(list), a view, toArray()) is no
      * ExecutionObject: its toString, hashCode and equals are the JDK's and nothing accounts or guards it, and one that holds the same nested list
      * twice is 2^depth when it is printed. The container classes of this library guard themselves; a plain one is walked where a script uses it:
-     * as the receiver or an argument of a call, as an argument of a constructor and as an operand of a concatenation. A type with its own
+     * as the receiver or an argument of a call, as an argument of a constructor and as an operand of a concatenation or of == and !=. A type with its own
      * size function (a calculated field argument) is accounted by that function and is left alone.
      */
     private boolean plainContainer(Object value) {
         return value != null && !(value instanceof ExecutionObject)
-                && (value instanceof Collection || value instanceof Map || value instanceof Object[])
+                && walkable(value) && !(value instanceof Iterator) && !(value instanceof BaseStream)
                 && this.parserConfig.getValueSizeFunction(value.getClass()) == null;
     }
 
-    private void checkPlainOperands(Object target, Object[] args) {
+    public void checkPlainOperands(Object target, Object[] args) {
         if (maxAllowedMemory <= 0) {
             return;
         }
@@ -324,7 +324,7 @@ public class ExecutionContext implements Serializable {
     }
 
     // a constructor keeps what it is given in an object this library cannot see into (a calculated field argument, a copy): any container is walked
-    private void checkConstructorArguments(Object[] args) {
+    public void checkConstructorArguments(Object[] args) {
         if (maxAllowedMemory <= 0 || args == null) {
             return;
         }
@@ -336,8 +336,8 @@ public class ExecutionContext implements Serializable {
         }
     }
 
-    /** the operand of a string concatenation: it is printed with the toString of its class */
-    public static void checkConcatenationOperand(Object value) {
+    /** the operand of a concatenation or of == and !=: it is printed, or compared, with the toString or equals of its class */
+    public static void checkOperand(Object value) {
         if (value == null || value instanceof CharSequence || value instanceof Number || value instanceof Boolean || value instanceof ExecutionObject) {
             return;
         }

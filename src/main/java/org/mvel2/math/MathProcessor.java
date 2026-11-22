@@ -275,8 +275,8 @@ public strictfp class MathProcessor {
   }
 
   private static String concat(Object val1, Object val2) {
-    ExecutionContext.checkConcatenationOperand(val1);
-    ExecutionContext.checkConcatenationOperand(val2);
+    ExecutionContext.checkOperand(val1);
+    ExecutionContext.checkOperand(val2);
     return valueOf(val1) + valueOf(val2);
   }
 
@@ -377,6 +377,8 @@ public strictfp class MathProcessor {
   }
 
   private static Boolean safeEquals(final Object val1, final Object val2) {
+    ExecutionContext.checkOperand(val1);
+    ExecutionContext.checkOperand(val2);
     if (val1 != null) {
       return val1.equals(val2);
     }
@@ -384,6 +386,8 @@ public strictfp class MathProcessor {
   }
 
   private static Boolean safeNotEquals(final Object val1, final Object val2) {
+    ExecutionContext.checkOperand(val1);
+    ExecutionContext.checkOperand(val2);
     if (val1 != null) {
       return !val1.equals(val2);
     }
@@ -400,10 +404,10 @@ public strictfp class MathProcessor {
             return list;
 
           case EQUAL:
-            return val1.equals(val2);
+            return safeEquals(val1, val2);
 
           case NEQUAL:
-            return !val1.equals(val2);
+            return safeNotEquals(val1, val2);
 
           default:
             throw new UnsupportedOperationException("illegal operation on Collection type");

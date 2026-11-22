@@ -224,6 +224,31 @@ public class TbExpandedSizeTest extends TestCase {
         }
     }
 
+    // a call site checks only the first call by the optimizer: the cached accessors of the following calls check as well
+    public void testAWarmCallSiteIsCheckedToo() {
+        String f = "function f(n, p) { return n == 0 ? p : f(n - 1, java.util.List.of(p, p)); } ";
+        assertRefused(f + "f(1, 'x'); function g(p) { return p.hashCode(); } g(java.util.List.of(1)); g(f(29, 'x'))");
+        assertRefused(f + "f(1, 'x'); function g(p) { return p.toString().length(); } g(java.util.List.of(1)); g(f(24, 'x'))");
+        String big = "a = ['x']; for (int i = 0; i < 21; i++) { a = [a, a]; } big = [a, a, a, a, a, a, a, a]; ";
+        assertRefused(big + "function h(p) { return new java.util.ArrayList(p).size(); } h([1]); h(big)");
+    }
+
+    // Map.Entry and Optional are expanded by toString and hashCode as a list is
+    public void testAnEntryOrOptionalChainIsRefused() {
+        assertRefused("function f(n, p) { return n == 0 ? p : f(n - 1, java.util.Map.entry(p, p)); } ('' + f(23, 'x')).length()");
+        assertRefused("function f(n, p) { return n == 0 ? p : f(n - 1, java.util.Map.entry(p, p)); } f(30, 'x').hashCode()");
+        assertRefused("function f(n, p) { return n == 0 ? p : f(n - 1, java.util.List.of(java.util.Optional.of(p), java.util.Optional.of(p))); } f(24, 'x').toString().length()");
+    }
+
+    // == calls equals on the left operand: a plain left operand is walked like any other use
+    public void testAnEqualityWithAPlainOperandIsRefused() {
+        String two = "a1 = ['x']; a2 = ['x']; for (int i = 0; i < 20; i++) { a1 = [a1, a1]; a2 = [a2, a2]; } "
+                + "x = [a1, a1, a1, a1, a1, a1, a1, a1, a1, a1, a1, a1, a1, a1, a1, a1]; y = [a2, a2, a2, a2, a2, a2, a2, a2, a2, a2, a2, a2, a2, a2, a2, a2]; ";
+        assertRefused(two + "java.util.List.copyOf(x) == y");
+        assertRefused(two + "java.util.List.copyOf(x) != y");
+        assertEquals(Boolean.TRUE, run("java.util.List.copyOf([1, 2]) == [1, 2]"));
+    }
+
     public void testOrdinaryPlainCollectionsStillWork() {
         assertEquals(2, run("function g(p) { return p.size(); } g(java.util.List.of(1, 2))"));
         assertEquals("[1, 2]", run("java.util.List.of(1, 2).toString()"));
