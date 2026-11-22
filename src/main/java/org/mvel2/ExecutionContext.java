@@ -12,6 +12,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -238,6 +239,61 @@ public class ExecutionContext implements Serializable {
 
     public long getMaxAllowedMemory() {
         return maxAllowedMemory;
+    }
+
+    private static final int MAX_NESTING_DEPTH = 1000;
+
+    /**
+     * The memory accounting counts a list that is already held by a variable or by another list as a reference (4 bytes), and forgets it
+     * when its variable is assigned again: a list that holds the same list twice, 24 levels deep, is 16 million elements when it is walked.
+     * Refuses a collection, a map or an entry whose expanded size (every element counted as many times as it is reached) is above the memory of
+     * the script, before toString, hashCode, equals, join, sort, a JSON writer or the caller that serializes the result walks it.
+     * The walk visits every object once, so it costs the size of the structure, not the size of its expansion.
+     */
+    public void checkExpansion(Object root) {
+        if (maxAllowedMemory > 0 && (root instanceof Collection || root instanceof Map || root instanceof Map.Entry)) {
+            expandedSize(root, new IdentityHashMap<>(), 0);
+        }
+    }
+
+    private long expandedSize(Object value, Map<Object, Long> visited, int depth) {
+        if (value instanceof CharSequence) {
+            return ((CharSequence) value).length();
+        }
+        if (!(value instanceof Collection || value instanceof Map || value instanceof Map.Entry)) {
+            return value == null ? 0 : 8;
+        }
+        Long known = visited.get(value);
+        if (known != null) {
+            return known;
+        }
+        if (depth > MAX_NESTING_DEPTH) {
+            throw new ScriptMemoryOverflowException("Max nesting depth overflow (> " + MAX_NESTING_DEPTH + ")!");
+        }
+        visited.put(value, 0L); // a cycle adds nothing the second time it is reached
+        long size = 0;
+        if (value instanceof Map.Entry) {
+            Map.Entry<?, ?> entry = (Map.Entry<?, ?>) value;
+            size = 4 + expandedSize(entry.getKey(), visited, depth + 1) + expandedSize(entry.getValue(), visited, depth + 1);
+        } else if (value instanceof Map) {
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+                size += 4 + expandedSize(entry.getKey(), visited, depth + 1) + expandedSize(entry.getValue(), visited, depth + 1);
+                checkExpandedSize(size);
+            }
+        } else {
+            for (Object element : (Collection<?>) value) {
+                size += 2 + expandedSize(element, visited, depth + 1);
+                checkExpandedSize(size);
+            }
+        }
+        visited.put(value, size);
+        return size;
+    }
+
+    private void checkExpandedSize(long size) {
+        if (size > maxAllowedMemory) {
+            throw new ScriptMemoryOverflowException("Max expanded size overflow (" + size + " > " + maxAllowedMemory + ")!");
+        }
     }
 
     private void checkMemoryLimit() {

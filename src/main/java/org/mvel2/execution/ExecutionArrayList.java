@@ -166,6 +166,25 @@ public class ExecutionArrayList<E> extends ArrayList<E> implements ExecutionObje
     }
 
     @Override
+    public String toString() {
+        this.executionContext.checkExpansion(this);
+        return super.toString();
+    }
+
+    @Override
+    public int hashCode() {
+        this.executionContext.checkExpansion(this);
+        return super.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        this.executionContext.checkExpansion(this);
+        this.executionContext.checkExpansion(o);
+        return super.equals(o);
+    }
+
+    @Override
     public long memorySize() {
         return memorySize;
     }
@@ -180,6 +199,7 @@ public class ExecutionArrayList<E> extends ArrayList<E> implements ExecutionObje
     }
 
     public String join(String separator) {
+        this.executionContext.checkExpansion(this);
         String strJoin = this.stream()
                 .map(Object::toString)
                 .collect(Collectors.joining(separator));
@@ -194,6 +214,7 @@ public class ExecutionArrayList<E> extends ArrayList<E> implements ExecutionObje
     }
 
     public void sort(boolean asc) {
+        this.executionContext.checkExpansion(this);
         if (validateClazzInArrayIsOnlyNumber()) {
             super.sort(asc ? NUMERIC_COMP_ASC : NUMERIC_COMP_DESC);
         } else {

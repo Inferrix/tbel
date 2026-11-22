@@ -128,6 +128,25 @@ public class ExecutionHashMap<K, V> extends LinkedHashMap<K, V> implements Execu
     }
 
     @Override
+    public String toString() {
+        this.executionContext.checkExpansion(this);
+        return super.toString();
+    }
+
+    @Override
+    public int hashCode() {
+        this.executionContext.checkExpansion(this);
+        return super.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        this.executionContext.checkExpansion(this);
+        this.executionContext.checkExpansion(o);
+        return super.equals(o);
+    }
+
+    @Override
     public long memorySize() {
         return memorySize;
     }

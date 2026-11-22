@@ -83,6 +83,25 @@ public class ExecutionLinkedHashSet<E> extends LinkedHashSet<E> implements Execu
 
 
     @Override
+    public String toString() {
+        this.executionContext.checkExpansion(this);
+        return super.toString();
+    }
+
+    @Override
+    public int hashCode() {
+        this.executionContext.checkExpansion(this);
+        return super.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        this.executionContext.checkExpansion(this);
+        this.executionContext.checkExpansion(o);
+        return super.equals(o);
+    }
+
+    @Override
     public long memorySize() {
         return this.memorySize;
     }

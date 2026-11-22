@@ -953,7 +953,10 @@ public class MVEL {
         vars.forEach((k,v) -> newVars.put(k , ArgsRepackUtil.repack(ctx, v)));
         vars = newVars;
       }
-      return ArgsRepackUtil.unpack(executeExpression(compiledExpression, ctx, vars));
+      Object result = executeExpression(compiledExpression, ctx, vars);
+      // unpack walks the result as a tree: a list that holds the same list twice, nested, is 2^depth elements
+      ctx.checkExpansion(result);
+      return ArgsRepackUtil.unpack(result);
     }
     finally {
       ExecutionContext.restoreCurrent(previous);
