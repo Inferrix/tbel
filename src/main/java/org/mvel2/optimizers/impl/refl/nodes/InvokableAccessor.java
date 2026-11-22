@@ -1,6 +1,7 @@
 package org.mvel2.optimizers.impl.refl.nodes;
 
 import org.mvel2.ExecutionContext;
+import org.mvel2.util.TriFunction;
 import org.mvel2.compiler.ExecutableStatement;
 import org.mvel2.integration.VariableResolverFactory;
 
@@ -40,14 +41,24 @@ public abstract class InvokableAccessor extends BaseAccessor {
 
   protected static Object[] checkInvocation(Method method, Object ctx, Object elCtx, Object[] args) {
     if (elCtx instanceof ExecutionContext) {
-      return ((ExecutionContext) elCtx).checkInvocation(method, ctx, convertToParameterTypes(method.getParameterTypes(), method.isVarArgs(), args));
+      ExecutionContext executionContext = (ExecutionContext) elCtx;
+      executionContext.checkArgumentsCount(args);
+      TriFunction<ExecutionContext, Object, Object[], Object[]> checker = executionContext.getMethodInvocationChecker(method);
+      if (checker != null) {
+        return checker.apply(executionContext, ctx, convertToParameterTypes(method.getParameterTypes(), method.isVarArgs(), args));
+      }
     }
     return args;
   }
 
   protected static Object[] checkConstruction(Constructor<?> constructor, Object elCtx, Object[] args) {
     if (elCtx instanceof ExecutionContext) {
-      return ((ExecutionContext) elCtx).checkConstruction(constructor, convertToParameterTypes(constructor.getParameterTypes(), constructor.isVarArgs(), args));
+      ExecutionContext executionContext = (ExecutionContext) elCtx;
+      executionContext.checkArgumentsCount(args);
+      TriFunction<ExecutionContext, Object, Object[], Object[]> checker = executionContext.getConstructorChecker(constructor);
+      if (checker != null) {
+        return checker.apply(executionContext, null, convertToParameterTypes(constructor.getParameterTypes(), constructor.isVarArgs(), args));
+      }
     }
     return args;
   }

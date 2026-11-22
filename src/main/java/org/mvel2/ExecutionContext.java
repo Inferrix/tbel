@@ -63,10 +63,22 @@ public class ExecutionContext implements Serializable {
         }
     }
 
-    public Object[] checkInvocation(Method method, Object ctx, Object[] args) {
+    public void checkArgumentsCount(Object[] args) {
         if (args != null && maxAllowedMethodArgs > 0 && args.length > maxAllowedMethodArgs) {
             throw new ScriptRuntimeException("Maximum method arguments count overflow (" + args.length + " > " + maxAllowedMethodArgs + ")!");
         }
+    }
+
+    public TriFunction<ExecutionContext, Object, Object[], Object[]> getMethodInvocationChecker(Method method) {
+        return this.parserConfig.getMethodInvocationChecker(method);
+    }
+
+    public TriFunction<ExecutionContext, Object, Object[], Object[]> getConstructorChecker(Constructor<?> constructor) {
+        return this.parserConfig.getConstructorChecker(constructor);
+    }
+
+    public Object[] checkInvocation(Method method, Object ctx, Object[] args) {
+        checkArgumentsCount(args);
         TriFunction<ExecutionContext, Object, Object[], Object[]> invocationChecker = this.parserConfig.getMethodInvocationChecker(method);
         if (invocationChecker != null) {
             return invocationChecker.apply(this, ctx, args);
@@ -75,9 +87,7 @@ public class ExecutionContext implements Serializable {
     }
 
     public Object[] checkConstruction(Constructor<?> constructor, Object[] args) {
-        if (args != null && maxAllowedMethodArgs > 0 && args.length > maxAllowedMethodArgs) {
-            throw new ScriptRuntimeException("Maximum method arguments count overflow (" + args.length + " > " + maxAllowedMethodArgs + ")!");
-        }
+        checkArgumentsCount(args);
         TriFunction<ExecutionContext, Object, Object[], Object[]> constructorChecker = this.parserConfig.getConstructorChecker(constructor);
         if (constructorChecker != null) {
             return constructorChecker.apply(this, null, args);

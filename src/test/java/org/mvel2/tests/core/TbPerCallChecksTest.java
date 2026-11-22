@@ -327,4 +327,15 @@ public class TbPerCallChecksTest extends TestCase {
             // refused on the first execution of the site
         }
     }
+
+    // no checker is registered for String#charAt: later calls at the site take the plain Method.invoke path
+    // (Character widens, Long goes through the IllegalArgumentException + coercion fallback) and still work
+    public void testUncheckedMethodLongAndCharacterArgumentsOnLaterCalls() {
+        Map<String, Object> longs = new HashMap<String, Object>();
+        longs.put("v", Arrays.asList(1, 2L, 3L));
+        assertEquals("bcd", run("r = ''; for (i = 0; i < 3; i++) { r = r + 'abcdef'.charAt(v[i]) }; r", longs));
+        Map<String, Object> chars = new HashMap<String, Object>();
+        chars.put("v", Arrays.asList(1, (char) 2, (char) 3));
+        assertEquals("bcd", run("r = ''; for (i = 0; i < 3; i++) { r = r + 'abcdef'.charAt(v[i]) }; r", chars));
+    }
 }
