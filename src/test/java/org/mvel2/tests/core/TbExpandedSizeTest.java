@@ -158,6 +158,51 @@ public class TbExpandedSizeTest extends TestCase {
         assertEquals(before, context.getMemorySize());
     }
 
+    // Jackson (Jdk8Module) writes a Stream as a list: a stream cannot be walked without being consumed
+    public void testAStreamIsRefused() {
+        assertFails(DAG + "a.stream()", org.mvel2.ScriptRuntimeException.class);
+    }
+
+    // AbstractSet.equals asks this set whether it contains every element of the other: the elements of the argument are hashed
+    public void testSetEqualsChecksItsArgument() {
+        ExecutionContext context = new ExecutionContext(parserConfig, 8L * 1024 * 1024);
+        org.mvel2.execution.ExecutionArrayList<Object> a = new org.mvel2.execution.ExecutionArrayList<>(context);
+        a.add("x");
+        for (int i = 0; i < 24; i++) {
+            org.mvel2.execution.ExecutionArrayList<Object> b = new org.mvel2.execution.ExecutionArrayList<>(context);
+            context.checkAssignGlobalVariable("a", a); // held by a variable: the accounting counts it as a 4 byte reference
+            b.add(a);
+            b.add(a);
+            a = b;
+        }
+        org.mvel2.execution.ExecutionArrayList<Object> x = new org.mvel2.execution.ExecutionArrayList<>(context);
+        org.mvel2.execution.ExecutionLinkedHashSet<Object> s1 = new org.mvel2.execution.ExecutionLinkedHashSet<>(context);
+        org.mvel2.execution.ExecutionLinkedHashSet<Object> s2 = new org.mvel2.execution.ExecutionLinkedHashSet<>(context);
+        s1.add(1);
+        s2.add(x);
+        context.checkAssignGlobalVariable("a", a);
+        x.add(a); // after the element is in the set, as a script can
+        x.add(a);
+        long start = System.nanoTime();
+        try {
+            s1.equals(s2);
+            fail("expected ScriptMemoryOverflowException");
+        } catch (ScriptMemoryOverflowException expected) {
+            assertTrue((System.nanoTime() - start) / 1_000_000 < 3000);
+        }
+    }
+
+    // a function parameter is a local variable: a plain java.util collection is as unsupported there as it is in an assignment
+    public void testAFunctionParameterTakesNoPlainCollection() {
+        String f = "function f(n, p) { return n == 0 ? p : f(n - 1, java.util.List.of(p, p)); } ";
+        assertFails(f + "f(24, 'x').hashCode()", org.mvel2.ScriptRuntimeException.class);
+        assertFails(f + "('' + f(24, 'x')).length()", org.mvel2.ScriptRuntimeException.class);
+        assertFails("function f(n, p) { return n == 0 ? p : f(n - 1, java.util.Arrays.asList(p, p)); } f(24, 'x').hashCode()", org.mvel2.ScriptRuntimeException.class);
+        assertEquals("xyyy", run("function f(n, p) { return n == 0 ? p : f(n - 1, p + 'y'); } f(3, 'x')"));
+        assertEquals(2, run("function g(p) { return p.length; } g('a,b'.split(','))"));
+        assertEquals(2, run("function h(p) { return p.size(); } h([1, 2])"));
+    }
+
     public void testAnUnlimitedContextIsNotChecked() {
         executionContext = new ExecutionContext(parserConfig, 0);
         assertEquals(Boolean.TRUE, run("a = ['x']; for (int i = 0; i < 10; i++) { a = [a, a]; } a.toString().length() > 0"));

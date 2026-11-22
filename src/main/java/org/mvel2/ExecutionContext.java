@@ -26,6 +26,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+import java.util.stream.BaseStream;
 import java.util.stream.Collectors;
 
 public class ExecutionContext implements Serializable {
@@ -290,9 +291,20 @@ public class ExecutionContext implements Serializable {
         }
     }
 
+    /**
+     * A function parameter is a local variable, but it is bound without the accounting of an assignment, so a plain java.util collection
+     * (List.of, Arrays.asList, new java.util.ArrayList()) that no assignment accepts could be held, and nested, there: its toString and hashCode
+     * are the JDK's and no guard sees them. The same refusal as an assignment.
+     */
+    public void checkParameter(Object value) {
+        if (maxAllowedMemory > 0 && walkable(value) && !(value instanceof ExecutionObject) && !(value instanceof Object[])) {
+            throw new ScriptRuntimeException("Unsupported value type: " + value.getClass());
+        }
+    }
+
     private static boolean walkable(Object value) {
         return value instanceof Collection || value instanceof Map || value instanceof Map.Entry || value instanceof Object[] || value instanceof Optional
-                || value instanceof Iterable || value instanceof Iterator;
+                || value instanceof Iterable || value instanceof Iterator || value instanceof BaseStream;
     }
 
     private long expandedSize(Object value, int depth) {
@@ -311,7 +323,7 @@ public class ExecutionContext implements Serializable {
         if (!walkable(value)) {
             return 8;
         }
-        if (value instanceof Iterator) {
+        if (value instanceof Iterator || value instanceof BaseStream) {
             throw new ScriptRuntimeException("Unsupported value type: " + value.getClass());
         }
         Long known = expansionScratch.isEmpty() ? null : expansionScratch.get(value);
