@@ -160,11 +160,6 @@ public class Function extends ASTNode implements Safe, HasStatement {
   }
 
   public Object call(Object ctx, ExecutionContext execCtx, Object thisValue, VariableResolverFactory factory, Object[] parms) {
-    if (execCtx != null && parms != null) {
-      for (Object parm : parms) {
-        execCtx.checkParameter(parm);
-      }
-    }
     if (parms != null && parms.length != 0) {
       // detect tail recursion
       if (factory instanceof FunctionVariableResolverFactory

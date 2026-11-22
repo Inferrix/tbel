@@ -192,15 +192,62 @@ public class TbExpandedSizeTest extends TestCase {
         }
     }
 
-    // a function parameter is a local variable: a plain java.util collection is as unsupported there as it is in an assignment
-    public void testAFunctionParameterTakesNoPlainCollection() {
+    // a plain java.util collection (List.of, Arrays.asList, a copy, a view, an array) is no ExecutionObject: its toString and hashCode are the JDK's
+    // and nothing accounts it. It is walked where it is used as the receiver or an argument of a call, in a constructor and in a string concatenation.
+    public void testAPlainCollectionDagIsRefusedWhereItIsBuilt() {
         String f = "function f(n, p) { return n == 0 ? p : f(n - 1, java.util.List.of(p, p)); } ";
-        assertFails(f + "f(24, 'x').hashCode()", org.mvel2.ScriptRuntimeException.class);
-        assertFails(f + "('' + f(24, 'x')).length()", org.mvel2.ScriptRuntimeException.class);
-        assertFails("function f(n, p) { return n == 0 ? p : f(n - 1, java.util.Arrays.asList(p, p)); } f(24, 'x').hashCode()", org.mvel2.ScriptRuntimeException.class);
+        assertRefused(f + "f(24, 'x').hashCode()");
+        assertRefused(f + "('' + f(24, 'x')).length()");
+        assertRefused("function f(n, p) { return n == 0 ? p : f(n - 1, java.util.Arrays.asList(p, p)); } f(24, 'x').hashCode()");
+        // an array in a parameter
+        assertRefused("function f(n, p) { return n == 0 ? p : f(n - 1, java.util.Arrays.asList(p, p).toArray()); } java.util.Arrays.deepToString(f(24, 'x')).length()");
+        // a for-each variable
+        StringBuilder loop = new StringBuilder("p0 = 'x'; ");
+        for (int i = 1; i <= 24; i++) {
+            loop.append("for (p").append(i).append(" : java.util.List.of(java.util.List.of(p").append(i - 1).append(", p").append(i - 1).append("))) { ");
+        }
+        loop.append("('' + p24).length()");
+        for (int i = 1; i <= 24; i++) {
+            loop.append(" }");
+        }
+        assertRefused(loop.toString());
+    }
+
+    // each element passes the guard of its own container; the copy or view that holds the same one N times does not
+    public void testACopyOrViewThatHoldsAReusedListIsRefused() {
+        String big = "a = ['x']; for (int i = 0; i < 21; i++) { a = [a, a]; } big = [a, a, a, a, a, a, a, a]; ";
+        assertRefused(big + "big.toString().length()");
+        for (String call : new String[] {"java.util.Arrays.toString(big.toArray()).length()", "java.util.List.copyOf(big).toString().length()",
+                "new java.util.ArrayList(big).toString().length()", "new java.util.TreeMap(m).toString().length()", "m.values().toString().length()",
+                "java.util.Arrays.hashCode(big.toArray())"}) {
+            assertRefused(big + "m = {k: big}; " + call);
+        }
+    }
+
+    public void testOrdinaryPlainCollectionsStillWork() {
+        assertEquals(2, run("function g(p) { return p.size(); } g(java.util.List.of(1, 2))"));
+        assertEquals("[1, 2]", run("java.util.List.of(1, 2).toString()"));
+        assertEquals("[1, 2]", run("('' + java.util.Arrays.asList(1, 2))"));
+        assertEquals(3, run("l = [1, 2, 3]; new java.util.ArrayList(l).size()"));
+        assertEquals("[a, b]", run("java.util.Arrays.toString('a,b'.split(','))"));
         assertEquals("xyyy", run("function f(n, p) { return n == 0 ? p : f(n - 1, p + 'y'); } f(3, 'x')"));
-        assertEquals(2, run("function g(p) { return p.length; } g('a,b'.split(','))"));
-        assertEquals(2, run("function h(p) { return p.size(); } h([1, 2])"));
+    }
+
+    // AbstractSet.equals answers false for a non-set without looking at it: the walk of the argument is for another set of the same size
+    public void testSetEqualsDoesNotWalkAListArgument() {
+        ExecutionContext context = new ExecutionContext(parserConfig, 8L * 1024 * 1024);
+        org.mvel2.execution.ExecutionArrayList<Object> a = new org.mvel2.execution.ExecutionArrayList<>(context);
+        a.add("x");
+        for (int i = 0; i < 24; i++) {
+            org.mvel2.execution.ExecutionArrayList<Object> b = new org.mvel2.execution.ExecutionArrayList<>(context);
+            context.checkAssignGlobalVariable("a", a);
+            b.add(a);
+            b.add(a);
+            a = b;
+        }
+        org.mvel2.execution.ExecutionLinkedHashSet<Object> set = new org.mvel2.execution.ExecutionLinkedHashSet<>(context);
+        set.add(1);
+        assertFalse(set.equals(a));
     }
 
     public void testAnUnlimitedContextIsNotChecked() {

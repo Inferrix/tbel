@@ -103,11 +103,13 @@ public class ExecutionLinkedHashSet<E> extends LinkedHashSet<E> implements Execu
     }
 
     // the comparison stops at the first difference and walks no more than this: the other side is not checked
-    // AbstractSet.equals asks this set whether it contains each element of the argument: those elements are hashed, so the argument is checked too
-    // (also inside an outer walk, that approved the receiver only)
+    // AbstractSet.equals asks this set whether it contains each element of a set of the same size: those elements are hashed, so such an argument is
+    // checked too (also inside an outer walk, that approved the receiver only); any other argument is answered false without being looked at
     @Override
     public boolean equals(Object o) {
-        this.executionContext.checkExpansion(o);
+        if (o instanceof Set && ((Set<?>) o).size() == this.size()) {
+            this.executionContext.checkExpansion(o);
+        }
         boolean outermost = this.executionContext.beginExpansion(this);
         try {
             return super.equals(o);

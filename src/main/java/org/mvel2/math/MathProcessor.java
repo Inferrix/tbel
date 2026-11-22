@@ -19,6 +19,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package org.mvel2.math;
 
+import org.mvel2.ExecutionContext;
 import org.mvel2.DataTypes;
 import org.mvel2.Unit;
 import org.mvel2.compiler.BlankLiteral;
@@ -273,6 +274,12 @@ public strictfp class MathProcessor {
     return isIntegerType(type) || isBooleanType(type);
   }
 
+  private static String concat(Object val1, Object val2) {
+    ExecutionContext.checkConcatenationOperand(val1);
+    ExecutionContext.checkConcatenationOperand(val2);
+    return valueOf(val1) + valueOf(val2);
+  }
+
   private static Object doOperationNonNumeric(int type1, final Object val1, final int operation, final Object val2) {
     switch (operation) {
       case ADD:
@@ -282,7 +289,7 @@ public strictfp class MathProcessor {
           return list;
         }
         else {
-          return valueOf(val1) + valueOf(val2);
+          return concat(val1, val2);
         }
 
       case EQUAL:
@@ -360,7 +367,7 @@ public strictfp class MathProcessor {
         return soundex(String.valueOf(val1)).equals(soundex(String.valueOf(val2)));
 
       case STR_APPEND:
-        return valueOf(val1) + valueOf(val2);
+        return concat(val1, val2);
     }
 
     throw new RuntimeException("could not perform numeric operation on non-numeric types: left-type="
@@ -722,7 +729,7 @@ public strictfp class MathProcessor {
           case NEQUAL:
             return safeNotEquals(val2, val1);
           case ADD:
-            return valueOf(val1) + valueOf(val2);
+            return concat(val1, val2);
         }
     }
     return null;
