@@ -129,21 +129,33 @@ public class ExecutionHashMap<K, V> extends LinkedHashMap<K, V> implements Execu
 
     @Override
     public String toString() {
-        this.executionContext.checkExpansion(this);
-        return super.toString();
+        boolean outermost = this.executionContext.beginExpansion(this);
+        try {
+            return super.toString();
+        } finally {
+            this.executionContext.endExpansion(outermost);
+        }
     }
 
     @Override
     public int hashCode() {
-        this.executionContext.checkExpansion(this);
-        return super.hashCode();
+        boolean outermost = this.executionContext.beginExpansion(this);
+        try {
+            return super.hashCode();
+        } finally {
+            this.executionContext.endExpansion(outermost);
+        }
     }
 
+    // the comparison stops at the first difference and walks no more than this: the other side is not checked
     @Override
     public boolean equals(Object o) {
-        this.executionContext.checkExpansion(this);
-        this.executionContext.checkExpansion(o);
-        return super.equals(o);
+        boolean outermost = this.executionContext.beginExpansion(this);
+        try {
+            return super.equals(o);
+        } finally {
+            this.executionContext.endExpansion(outermost);
+        }
     }
 
     @Override

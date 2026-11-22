@@ -167,21 +167,33 @@ public class ExecutionArrayList<E> extends ArrayList<E> implements ExecutionObje
 
     @Override
     public String toString() {
-        this.executionContext.checkExpansion(this);
-        return super.toString();
+        boolean outermost = this.executionContext.beginExpansion(this);
+        try {
+            return super.toString();
+        } finally {
+            this.executionContext.endExpansion(outermost);
+        }
     }
 
     @Override
     public int hashCode() {
-        this.executionContext.checkExpansion(this);
-        return super.hashCode();
+        boolean outermost = this.executionContext.beginExpansion(this);
+        try {
+            return super.hashCode();
+        } finally {
+            this.executionContext.endExpansion(outermost);
+        }
     }
 
+    // the comparison stops at the first difference and walks no more than this: the other side is not checked
     @Override
     public boolean equals(Object o) {
-        this.executionContext.checkExpansion(this);
-        this.executionContext.checkExpansion(o);
-        return super.equals(o);
+        boolean outermost = this.executionContext.beginExpansion(this);
+        try {
+            return super.equals(o);
+        } finally {
+            this.executionContext.endExpansion(outermost);
+        }
     }
 
     @Override
@@ -199,14 +211,18 @@ public class ExecutionArrayList<E> extends ArrayList<E> implements ExecutionObje
     }
 
     public String join(String separator) {
-        this.executionContext.checkExpansion(this);
-        String strJoin = this.stream()
-                .map(Object::toString)
-                .collect(Collectors.joining(separator));
-        return strJoin
-                .replaceAll(", ", ",")
-                .replaceAll("\\[", "")
-                .replaceAll("]", "");
+        boolean outermost = this.executionContext.beginExpansion(this);
+        try {
+            String strJoin = this.stream()
+                    .map(Object::toString)
+                    .collect(Collectors.joining(separator));
+            return strJoin
+                    .replaceAll(", ", ",")
+                    .replaceAll("\\[", "")
+                    .replaceAll("]", "");
+        } finally {
+            this.executionContext.endExpansion(outermost);
+        }
     }
 
     public void sort() {
@@ -214,11 +230,15 @@ public class ExecutionArrayList<E> extends ArrayList<E> implements ExecutionObje
     }
 
     public void sort(boolean asc) {
-        this.executionContext.checkExpansion(this);
-        if (validateClazzInArrayIsOnlyNumber()) {
-            super.sort(asc ? NUMERIC_COMP_ASC : NUMERIC_COMP_DESC);
-        } else {
-            super.sort(asc ? STRING_COMP_ASC : STRING_COMP_DESC);
+        boolean outermost = this.executionContext.beginExpansion(this);
+        try {
+            if (validateClazzInArrayIsOnlyNumber()) {
+                super.sort(asc ? NUMERIC_COMP_ASC : NUMERIC_COMP_DESC);
+            } else {
+                super.sort(asc ? STRING_COMP_ASC : STRING_COMP_DESC);
+            }
+        } finally {
+            this.executionContext.endExpansion(outermost);
         }
     }
 

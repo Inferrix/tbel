@@ -17,9 +17,11 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -243,56 +245,134 @@ public class ExecutionContext implements Serializable {
 
     private static final int MAX_NESTING_DEPTH = 1000;
 
+    // what a walk of the structure may add up to, as a multiple of the memory: the expanded size of ordinary data is about 2.5 times what the accounting counts for it
+    private static final long EXPANSION_FACTOR = 4;
+
+    private final Map<Object, Long> expansionScratch = new IdentityHashMap<>();
+    private boolean expanding;
+
     /**
      * The memory accounting counts a list that is already held by a variable or by another list as a reference (4 bytes), and forgets it
      * when its variable is assigned again: a list that holds the same list twice, 24 levels deep, is 16 million elements when it is walked.
-     * Refuses a collection, a map or an entry whose expanded size (every element counted as many times as it is reached) is above the memory of
-     * the script, before toString, hashCode, equals, join, sort, a JSON writer or the caller that serializes the result walks it.
+     * Refuses a collection, a map, an entry, an array, an Optional or an Iterable whose expanded size (every element counted as many times as it
+     * is reached) is above a multiple of the memory of the script, a cycle, an Iterator (it cannot be walked without being consumed) and a nesting
+     * deeper than 1000, before toString, hashCode, equals, join, sort, a JSON writer or the caller that serializes the result walks it.
      * The walk visits every object once, so it costs the size of the structure, not the size of its expansion.
      */
     public void checkExpansion(Object root) {
-        if (maxAllowedMemory > 0 && (root instanceof Collection || root instanceof Map || root instanceof Map.Entry)) {
-            expandedSize(root, new IdentityHashMap<>(), 0);
+        if (maxAllowedMemory > 0 && walkable(root)) {
+            try {
+                expandedSize(root, 0);
+            } finally {
+                if (!expansionScratch.isEmpty()) {
+                    expansionScratch.clear();
+                }
+            }
         }
     }
 
-    private long expandedSize(Object value, Map<Object, Long> visited, int depth) {
+    /**
+     * Checks the structure unless an outer call already did (the inner toString, hashCode and equals of the elements are part of that walk:
+     * checking each of them again costs depth x size). Returns true to the outermost call, that must pass it to endExpansion.
+     */
+    public boolean beginExpansion(Object root) {
+        if (expanding || maxAllowedMemory <= 0) {
+            return false;
+        }
+        checkExpansion(root);
+        expanding = true;
+        return true;
+    }
+
+    public void endExpansion(boolean outermost) {
+        if (outermost) {
+            expanding = false;
+        }
+    }
+
+    private static boolean walkable(Object value) {
+        return value instanceof Collection || value instanceof Map || value instanceof Map.Entry || value instanceof Object[] || value instanceof Optional
+                || value instanceof Iterable || value instanceof Iterator;
+    }
+
+    private long expandedSize(Object value, int depth) {
+        if (value == null) {
+            return 0;
+        }
         if (value instanceof CharSequence) {
             return ((CharSequence) value).length();
         }
-        if (!(value instanceof Collection || value instanceof Map || value instanceof Map.Entry)) {
-            return value == null ? 0 : 8;
+        if (value instanceof Number || value instanceof Boolean) {
+            return 8;
         }
-        Long known = visited.get(value);
+        if (value.getClass().isArray() && value.getClass().getComponentType().isPrimitive()) {
+            return Array.getLength(value);
+        }
+        if (!walkable(value)) {
+            return 8;
+        }
+        if (value instanceof Iterator) {
+            throw new ScriptRuntimeException("Unsupported value type: " + value.getClass());
+        }
+        Long known = expansionScratch.isEmpty() ? null : expansionScratch.get(value);
         if (known != null) {
+            if (known < 0) {
+                throw new ScriptRuntimeException("A structure that holds itself is not supported!");
+            }
             return known;
         }
         if (depth > MAX_NESTING_DEPTH) {
             throw new ScriptMemoryOverflowException("Max nesting depth overflow (> " + MAX_NESTING_DEPTH + ")!");
         }
-        visited.put(value, 0L); // a cycle adds nothing the second time it is reached
+        // a structure with no nested structure in it needs neither the memo nor the cycle check: the ordinary list costs no allocation
+        boolean marked = false;
         long size = 0;
         if (value instanceof Map.Entry) {
             Map.Entry<?, ?> entry = (Map.Entry<?, ?>) value;
-            size = 4 + expandedSize(entry.getKey(), visited, depth + 1) + expandedSize(entry.getValue(), visited, depth + 1);
+            marked = mark(value, mark(value, false, entry.getKey()), entry.getValue());
+            size = 4 + expandedSize(entry.getKey(), depth + 1) + expandedSize(entry.getValue(), depth + 1);
         } else if (value instanceof Map) {
-            for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
-                size += 4 + expandedSize(entry.getKey(), visited, depth + 1) + expandedSize(entry.getValue(), visited, depth + 1);
-                checkExpandedSize(size);
-            }
+            // forEach, not entrySet: the entry set of an ExecutionHashMap is a new set, hashed and accounted for every time it is asked for
+            long[] total = {0};
+            boolean[] nested = {false};
+            ((Map<?, ?>) value).forEach((key, element) -> {
+                nested[0] = mark(value, mark(value, nested[0], key), element);
+                total[0] += 4 + expandedSize(key, depth + 1) + expandedSize(element, depth + 1);
+                checkExpandedSize(total[0]);
+            });
+            size = total[0];
+            marked = nested[0];
+        } else if (value instanceof Optional) {
+            Object element = ((Optional<?>) value).orElse(null);
+            marked = mark(value, false, element);
+            size = 2 + expandedSize(element, depth + 1);
         } else {
-            for (Object element : (Collection<?>) value) {
-                size += 2 + expandedSize(element, visited, depth + 1);
+            Iterable<?> elements = value instanceof Object[] ? Arrays.asList((Object[]) value) : (Iterable<?>) value;
+            for (Object element : elements) {
+                marked = mark(value, marked, element);
+                size += 2 + expandedSize(element, depth + 1);
                 checkExpandedSize(size);
             }
         }
-        visited.put(value, size);
+        checkExpandedSize(size);
+        if (marked) {
+            expansionScratch.put(value, size);
+        }
         return size;
     }
 
+    // in progress: reached again from below it is a cycle
+    private boolean mark(Object parent, boolean marked, Object child) {
+        if (!marked && walkable(child)) {
+            expansionScratch.put(parent, -1L);
+            return true;
+        }
+        return marked;
+    }
+
     private void checkExpandedSize(long size) {
-        if (size > maxAllowedMemory) {
-            throw new ScriptMemoryOverflowException("Max expanded size overflow (" + size + " > " + maxAllowedMemory + ")!");
+        if (size > maxAllowedMemory * EXPANSION_FACTOR) {
+            throw new ScriptMemoryOverflowException("Max expanded size overflow (" + size + " > " + maxAllowedMemory * EXPANSION_FACTOR + ")!");
         }
     }
 

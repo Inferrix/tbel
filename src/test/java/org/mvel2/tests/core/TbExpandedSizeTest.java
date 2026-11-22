@@ -63,6 +63,20 @@ public class TbExpandedSizeTest extends TestCase {
         fail("expected ScriptMemoryOverflowException for: " + script);
     }
 
+    private void assertFails(String script, Class<? extends Throwable> type) {
+        try {
+            run(script);
+        } catch (Throwable e) {
+            for (Throwable t = e; t != null; t = t.getCause()) {
+                if (type.isInstance(t)) {
+                    return;
+                }
+            }
+            throw new AssertionError(script + " failed with " + e, e);
+        }
+        fail("expected " + type.getSimpleName() + " for: " + script);
+    }
+
     public void testExpandingAReusedListIsRefused() {
         for (String call : new String[] {"a.toString().length()", "a.hashCode()", "('' + a).length()", "a.join().length()", "a.sort()", "a.equals(a.slice())", "a.indexOf(a.slice())"}) {
             assertRefused(DAG + call);
@@ -101,6 +115,47 @@ public class TbExpandedSizeTest extends TestCase {
             flat.put("key" + i, "value" + i);
         }
         executionContext.checkExpansion(flat);
+    }
+
+    // an array, an Optional and an Iterable are walked by unpack and by a JSON writer as the lists are
+    public void testOtherContainersAreWalkedToo() {
+        for (String call : new String[] {"a.toArray()", "java.util.Optional.of(a)", "[a].toArray()"}) {
+            assertRefused(DAG + call);
+        }
+        assertRefused("m = {v: 'x'}; for (int i = 0; i < 24; i++) { m = {l: m, r: m}; } m.values().toArray()");
+        assertFails(DAG + "a.iterator()", org.mvel2.ScriptRuntimeException.class);
+    }
+
+    // a cycle is not a finite structure: hashCode and toString of it end in a StackOverflowError, which no caller handles
+    public void testACycleIsRefusedNotAStackOverflow() {
+        for (String script : new String[] {"a = []; b = [a]; a.add(b); a.toString()", "a = []; b = [a]; a.add(b); a.hashCode()", "m = {}; m.put('k', m); m.hashCode()", "l = []; l.add(l); l.hashCode()", "a = []; b = [a]; a.add(b); a"}) {
+            assertFails(script, org.mvel2.ScriptRuntimeException.class);
+        }
+    }
+
+    // the walk of toString/hashCode/equals is made once, not again by every nested call: depth x size
+    public void testANestedCallDoesNotWalkItsSubtreeAgain() {
+        long start = System.nanoTime();
+        run("l = []; for (int i = 0; i < 700000; i++) { l.add(i); } a = l; for (int j = 0; j < 999; j++) { a = [a]; } a.hashCode()");
+        assertTrue("took " + (System.nanoTime() - start) / 1_000_000 + " ms", (System.nanoTime() - start) / 1_000_000 < 3000);
+    }
+
+    // the bound is a multiple of the memory: an ordinary list of 850,000 numbers (3.4 MB accounted) can still be printed
+    public void testALargeButAccountedListCanStillBePrinted() {
+        assertEquals(Boolean.TRUE, run("l = []; for (int i = 0; i < 850000; i++) { l.add(i); } l.toString().length() > 0"));
+    }
+
+    // the walk must not call entrySet of an ExecutionHashMap: that builds a new accounted set of entries and hashes them on every call
+    public void testTheWalkDoesNotChangeTheMemoryAccounting() {
+        ExecutionContext context = new ExecutionContext(parserConfig, 8L * 1024 * 1024);
+        org.mvel2.execution.ExecutionHashMap<String, Object> map = new org.mvel2.execution.ExecutionHashMap<>(4, context);
+        map.put("a", "x");
+        map.put("b", "yy");
+        long before = context.getMemorySize();
+        for (int i = 0; i < 5; i++) {
+            context.checkExpansion(map);
+        }
+        assertEquals(before, context.getMemorySize());
     }
 
     public void testAnUnlimitedContextIsNotChecked() {
