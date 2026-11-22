@@ -1,9 +1,11 @@
 package org.mvel2.optimizers.impl.refl.nodes;
 
+import org.mvel2.ExecutionContext;
 import org.mvel2.compiler.ExecutableStatement;
 import org.mvel2.integration.VariableResolverFactory;
 
 import java.lang.reflect.Array;
+import java.lang.reflect.Method;
 
 import static org.mvel2.DataConversion.convert;
 
@@ -33,6 +35,13 @@ public abstract class InvokableAccessor extends BaseAccessor {
       values[length-1] = vararg;
     }
     return values;
+  }
+
+  protected static Object[] checkInvocation(Method method, Object ctx, Object elCtx, Object[] args) {
+    if (elCtx instanceof ExecutionContext) {
+      return ((ExecutionContext) elCtx).checkInvocation(method, ctx, args);
+    }
+    return args;
   }
 
   public Class[] getParameterTypes() {

@@ -18,6 +18,7 @@
  */
 package org.mvel2.optimizers.impl.refl.nodes;
 
+import org.mvel2.ScriptRuntimeException;
 import org.mvel2.compiler.AccessorNode;
 import org.mvel2.compiler.ExecutableStatement;
 import org.mvel2.integration.PropertyHandler;
@@ -43,7 +44,7 @@ public class MethodAccessorNH implements AccessorNode {
   public Object getValue(Object ctx, Object elCtx, VariableResolverFactory vars) {
     if (!coercionNeeded) {
       try {
-        Object v = method.invoke(ctx, executeAll(elCtx, vars));
+        Object v = method.invoke(ctx, InvokableAccessor.checkInvocation(method, ctx, elCtx, executeAll(elCtx, vars)));
         if (v == null) nullHandler.getProperty(method.getName(), ctx, vars);
 
         if (nextNode != null) {
@@ -64,6 +65,9 @@ public class MethodAccessorNH implements AccessorNode {
         coercionNeeded = true;
         return getValue(ctx, elCtx, vars);
       }
+      catch (ScriptRuntimeException e) {
+        throw e;
+      }
       catch (Exception e) {
         throw new RuntimeException("cannot invoke method", e);
       }
@@ -72,11 +76,14 @@ public class MethodAccessorNH implements AccessorNode {
     else {
       try {
         if (nextNode != null) {
-          return nextNode.getValue(method.invoke(ctx, executeAndCoerce(parameterTypes, elCtx, vars)), elCtx, vars);
+          return nextNode.getValue(method.invoke(ctx, InvokableAccessor.checkInvocation(method, ctx, elCtx, executeAndCoerce(parameterTypes, elCtx, vars))), elCtx, vars);
         }
         else {
-          return method.invoke(ctx, executeAndCoerce(parameterTypes, elCtx, vars));
+          return method.invoke(ctx, InvokableAccessor.checkInvocation(method, ctx, elCtx, executeAndCoerce(parameterTypes, elCtx, vars)));
         }
+      }
+      catch (ScriptRuntimeException e) {
+        throw e;
       }
       catch (Exception e) {
         throw new RuntimeException("cannot invoke method", e);
@@ -86,7 +93,7 @@ public class MethodAccessorNH implements AccessorNode {
 
   private Object executeOverrideTarget(Method o, Object ctx, Object elCtx, VariableResolverFactory vars) {
     try {
-      Object v = o.invoke(ctx, executeAll(elCtx, vars));
+      Object v = o.invoke(ctx, InvokableAccessor.checkInvocation(o, ctx, elCtx, executeAll(elCtx, vars)));
       if (v == null) v = nullHandler.getProperty(o.getName(), ctx, vars);
 
       if (nextNode != null) {
@@ -95,6 +102,9 @@ public class MethodAccessorNH implements AccessorNode {
       else {
         return v;
       }
+    }
+    catch (ScriptRuntimeException e2) {
+      throw e2;
     }
     catch (Exception e2) {
       throw new RuntimeException("unable to invoke method", e2);

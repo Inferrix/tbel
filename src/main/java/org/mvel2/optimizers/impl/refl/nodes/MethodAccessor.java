@@ -22,6 +22,7 @@ package org.mvel2.optimizers.impl.refl.nodes;
 
 import org.mvel2.ExecutionContext;
 import org.mvel2.ScriptMemoryOverflowException;
+import org.mvel2.ScriptRuntimeException;
 import org.mvel2.compiler.ExecutableStatement;
 import org.mvel2.integration.VariableResolverFactory;
 
@@ -41,10 +42,10 @@ public class MethodAccessor extends InvokableAccessor {
     if (!coercionNeeded) {
       try {
         if (nextNode != null) {
-          return nextNode.getValue(method.invoke(ctx, executeAll(elCtx, vars, method)), elCtx, vars);
+          return nextNode.getValue(method.invoke(ctx, checkInvocation(method, ctx, elCtx, executeAll(elCtx, vars, method))), elCtx, vars);
         }
         else {
-          return method.invoke(ctx, executeAll(elCtx, vars, method));
+          return method.invoke(ctx, checkInvocation(method, ctx, elCtx, executeAll(elCtx, vars, method)));
         }
       }
       catch (IllegalArgumentException e) {
@@ -57,7 +58,7 @@ public class MethodAccessor extends InvokableAccessor {
 
           coercionNeeded = true;
           return getValue(ctx, elCtx, vars);
-      } catch (ScriptMemoryOverflowException me){
+      } catch (ScriptRuntimeException me){
           throw me;
       } catch (Exception e) {
         if (e.getCause() instanceof ScriptMemoryOverflowException) {
@@ -70,10 +71,10 @@ public class MethodAccessor extends InvokableAccessor {
     else {
       try {
         if (nextNode != null) {
-          return nextNode.getValue(method.invoke(ctx, executeAndCoerce(parameterTypes, elCtx, vars, method.isVarArgs())), elCtx, vars);
+          return nextNode.getValue(method.invoke(ctx, checkInvocation(method, ctx, elCtx, executeAndCoerce(parameterTypes, elCtx, vars, method.isVarArgs()))), elCtx, vars);
         }
         else {
-          return method.invoke(ctx, executeAndCoerce(parameterTypes, elCtx, vars, method.isVarArgs()));
+          return method.invoke(ctx, checkInvocation(method, ctx, elCtx, executeAndCoerce(parameterTypes, elCtx, vars, method.isVarArgs())));
         }
       }
       catch (IllegalArgumentException e) {
@@ -86,7 +87,7 @@ public class MethodAccessor extends InvokableAccessor {
         else {
           throw e;
         }
-      } catch (ScriptMemoryOverflowException me){
+      } catch (ScriptRuntimeException me){
           throw me;
       } catch (Exception e) {
         if (e.getCause() instanceof ScriptMemoryOverflowException) {
@@ -105,10 +106,10 @@ public class MethodAccessor extends InvokableAccessor {
       try {
         try {
           if (nextNode != null) {
-            return nextNode.getValue(o.invoke(ctx, executeAll(elCtx, vars, o)), elCtx, vars);
+            return nextNode.getValue(o.invoke(ctx, checkInvocation(o, ctx, elCtx, executeAll(elCtx, vars, o))), elCtx, vars);
           }
           else {
-            return o.invoke(ctx, executeAll(elCtx, vars, o));
+            return o.invoke(ctx, checkInvocation(o, ctx, elCtx, executeAll(elCtx, vars, o)));
           }
         }
         catch (IllegalArgumentException e) {
@@ -118,6 +119,9 @@ public class MethodAccessor extends InvokableAccessor {
           return executeOverrideTarget(o, ctx, elCtx, vars);
         }
       }
+      catch (ScriptRuntimeException e2) {
+        throw e2;
+      }
       catch (Exception e2) {
         throw new RuntimeException("unable to invoke method", e2);
       }
@@ -125,15 +129,18 @@ public class MethodAccessor extends InvokableAccessor {
     else {
       try {
         if (nextNode != null) {
-          return nextNode.getValue(o.invoke(ctx, executeAndCoerce(o.getParameterTypes(), elCtx, vars, o.isVarArgs())), elCtx, vars);
+          return nextNode.getValue(o.invoke(ctx, checkInvocation(o, ctx, elCtx, executeAndCoerce(o.getParameterTypes(), elCtx, vars, o.isVarArgs()))), elCtx, vars);
         }
         else {
-          return o.invoke(ctx, executeAndCoerce(o.getParameterTypes(), elCtx, vars, o.isVarArgs()));
+          return o.invoke(ctx, checkInvocation(o, ctx, elCtx, executeAndCoerce(o.getParameterTypes(), elCtx, vars, o.isVarArgs())));
         }
       }
       catch (IllegalAccessException e) {
         throw new RuntimeException("unable to invoke method (expected target: " + method.getDeclaringClass().getName() + "::" + method.getName() + "; " +
             "actual target: " + ctx.getClass().getName() + "::" + method.getName() + "; coercionNeeded=" + (coercionNeeded ? "yes" : "no") + ")");
+      }
+      catch (ScriptRuntimeException e2) {
+        throw e2;
       }
       catch (Exception e2) {
         throw new RuntimeException("unable to invoke method (expected target: " + method.getDeclaringClass().getName() + "::" + method.getName() + "; " +
@@ -230,7 +237,7 @@ public class MethodAccessor extends InvokableAccessor {
 
   public Object setValue(Object ctx, Object elCtx, VariableResolverFactory variableFactory, Object value) {
     try {
-      return nextNode.setValue(method.invoke(ctx, executeAll(elCtx, variableFactory, method)), elCtx, variableFactory, value);
+      return nextNode.setValue(method.invoke(ctx, checkInvocation(method, ctx, elCtx, executeAll(elCtx, variableFactory, method))), elCtx, variableFactory, value);
     }
     catch (IllegalArgumentException e) {
       if (ctx != null && method.getDeclaringClass() != ctx.getClass()) {
@@ -242,6 +249,9 @@ public class MethodAccessor extends InvokableAccessor {
 
       coercionNeeded = true;
       return setValue(ctx, elCtx, variableFactory, value);
+    }
+    catch (ScriptRuntimeException e) {
+      throw e;
     }
     catch (Exception e) {
       throw new RuntimeException("cannot invoke method", e);
