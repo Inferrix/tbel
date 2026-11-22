@@ -67,7 +67,7 @@ public class WithNode extends BlockNode implements NestedStatement {
 
     for (ParmValuePair pvp : withExpressions) {
       checkExecution(ctx);
-      pvp.eval(ctxObject, factory);
+      pvp.eval(ctxObject, thisValue, factory);
     }
 
     return ctxObject;
@@ -277,11 +277,16 @@ public class WithNode extends BlockNode implements NestedStatement {
     }
 
     public void eval(Object ctx, VariableResolverFactory factory) {
+      eval(ctx, ctx, factory);
+    }
+
+    // thisValue stays the outer context (the ExecutionContext), so the invocation checkers still apply inside the block
+    public void eval(Object ctx, Object thisValue, VariableResolverFactory factory) {
       if (setExpression == null) {
-        this.statement.getValue(ctx, factory);
+        this.statement.getValue(ctx, thisValue, factory);
       }
       else {
-        MVEL.executeSetExpression(setExpression, ctx, factory, this.statement.getValue(ctx, factory));
+        MVEL.executeSetExpression(setExpression, ctx, factory, this.statement.getValue(ctx, thisValue, factory));
       }
     }
   }

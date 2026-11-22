@@ -91,13 +91,13 @@ public class CompiledExpression implements Serializable, ExecutableStatement {
     if (!optimized) {
       setupOptimizers();
       try {
-        return getValue(ctx, variableFactory);
+        return getDirectValue(ctx, elCtx, variableFactory);
       }
       finally {
         OptimizerFactory.clearThreadAccessorOptimizer();
       }
     }
-    return getValue(ctx, variableFactory);
+    return getDirectValue(ctx, elCtx, variableFactory);
   }
 
   public Object getValue(Object staticContext, VariableResolverFactory factory) {
@@ -115,6 +115,11 @@ public class CompiledExpression implements Serializable, ExecutableStatement {
 
   public Object getDirectValue(Object staticContext, VariableResolverFactory factory) {
     return execute(false, this, staticContext, parserConfiguration.getVariableFactory(factory));
+  }
+
+  // elCtx is the "this" of the nodes (the ExecutionContext when the statement runs inside a with block)
+  public Object getDirectValue(Object ctx, Object elCtx, VariableResolverFactory factory) {
+    return execute(false, this, ctx, elCtx, parserConfiguration.getVariableFactory(factory));
   }
 
   private void setupOptimizers() {

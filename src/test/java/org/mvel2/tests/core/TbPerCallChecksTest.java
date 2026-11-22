@@ -328,6 +328,61 @@ public class TbPerCallChecksTest extends TestCase {
         }
     }
 
+    // a with block evaluated its statements against the with object as the execution context, so no checker applied
+    private void assertWithBlockIsRefused(String script) throws Exception {
+        AtomicInteger counter = new AtomicInteger();
+        registerRepeatLimit(counter, 100);
+        parserConfig.registerMethodInvocationChecker(String.class.getMethod("indent", int.class), (ctx, target, args) -> {
+            counter.incrementAndGet();
+            if (((Number) args[0]).intValue() > 100) {
+                throw new ScriptMemoryOverflowException("indent too large");
+            }
+            return args;
+        });
+        parserConfig.registerDataType("ArrayList", ArrayList.class, list -> 8L);
+        parserConfig.registerConstructorChecker(ArrayList.class.getConstructor(int.class), (ctx, target, args) -> {
+            counter.incrementAndGet();
+            if (((Number) args[0]).intValue() > 100) {
+                throw new ScriptMemoryOverflowException("capacity too large");
+            }
+            return args;
+        });
+        try {
+            run(script);
+            fail("expected ScriptMemoryOverflowException for: " + script);
+        } catch (ScriptMemoryOverflowException expected) {
+            assertTrue(counter.get() >= 1);
+        }
+    }
+
+    public void testWithBlockMethodCallOnTheWithObjectIsChecked() throws Exception {
+        assertWithBlockIsRefused("x = 'a'; with (x) { indent(1500000000) }; 1");
+    }
+
+    public void testWithBlockAssignmentFromAMethodCallIsChecked() throws Exception {
+        assertWithBlockIsRefused("x = {}; with (x) { y = 'a'.repeat(1500000000).length() }; 1");
+    }
+
+    public void testWithBlockConstructorIsChecked() throws Exception {
+        assertWithBlockIsRefused("x = {}; with (x) { y = new ArrayList(300000000).size() }; 1");
+    }
+
+    public void testWithBlockInsideAFunctionIsChecked() throws Exception {
+        assertWithBlockIsRefused("function f(msg) { var x = {}; with (x) { y = 'a'.repeat(1500000000).length() } return {msg: msg}; } f(1)");
+    }
+
+    public void testWithBlockCompoundAssignmentAndWithAsAValueAreChecked() throws Exception {
+        assertWithBlockIsRefused("x = {y: 1}; with (x) { y += 'a'.repeat(1500000000).length() }; 1");
+        assertWithBlockIsRefused("x = {}; r = with (x) { y = 'a'.repeat(1500000000).length() }; 1");
+    }
+
+    public void testWithBlockKeepsItsSemanticsWhenNothingIsRefused() throws Exception {
+        AtomicInteger counter = new AtomicInteger();
+        registerRepeatLimit(counter, 100);
+        assertEquals(3, run("x = {}; with (x) { y = 'a'.repeat(3).length() }; x.y"));
+        assertEquals(1, counter.get());
+    }
+
     // no checker is registered for String#charAt: later calls at the site take the plain Method.invoke path
     // (Character widens, Long goes through the IllegalArgumentException + coercion fallback) and still work
     public void testUncheckedMethodLongAndCharacterArgumentsOnLaterCalls() {
