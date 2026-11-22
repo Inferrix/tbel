@@ -13,8 +13,9 @@ import org.mvel2.optimizers.OptimizerFactory;
 
 import java.io.Serializable;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.mvel2.MVEL.compileExpression;
@@ -49,8 +50,51 @@ public class TbPerCallChecksTest extends TestCase {
     }
 
     private Object run(String script) {
+        return run(script, new HashMap<String, Object>());
+    }
+
+    private Object run(String script, Map<String, Object> vars) {
         Serializable compiled = compileExpression(script);
-        return executeTbExpression(compiled, new ExecutionContext(parserConfig, 8L * 1024 * 1024), new HashMap<String, Object>());
+        return executeTbExpression(compiled, new ExecutionContext(parserConfig, 8L * 1024 * 1024), vars);
+    }
+
+    // The checker only looks at Integer (as the production checkers do): it must be handed the argument
+    // converted to the int parameter on the second call at a site, as on the first.
+    private void assertSecondWideningCallIsChecked(String script, Map<String, Object> vars) throws Exception {
+        AtomicInteger counter = new AtomicInteger();
+        Method repeat = String.class.getMethod("repeat", int.class);
+        parserConfig.registerMethodInvocationChecker(repeat, (ctx, target, args) -> {
+            counter.incrementAndGet();
+            if (args[0] instanceof Integer && (Integer) args[0] > 100) {
+                throw new ScriptMemoryOverflowException("repeat too large");
+            }
+            return args;
+        });
+        try {
+            run(script, vars);
+            fail("expected ScriptMemoryOverflowException");
+        } catch (ScriptMemoryOverflowException expected) {
+            assertEquals(2, counter.get());
+        }
+    }
+
+    public void testSecondCallWithCharacterArgumentIsChecked() throws Exception {
+        // 'a' = 97 passes, 'e' = 101 must be refused on the second call
+        assertSecondWideningCallIsChecked("s = 'ae'; r = ''; for (i = 0; i < 2; i++) { r = 'x'.repeat(s.charAt(i)) }; r",
+                new HashMap<String, Object>());
+    }
+
+    public void testSecondCallWithShortArgumentIsChecked() throws Exception {
+        Map<String, Object> vars = new HashMap<String, Object>();
+        vars.put("sh", Arrays.asList((short) 5, (short) 1000));
+        assertSecondWideningCallIsChecked("r = ''; for (i = 0; i < 2; i++) { r = 'x'.repeat(sh[i]) }; r", vars);
+    }
+
+    public void testSecondCallWithByteArgumentIsChecked() throws Exception {
+        Map<String, Object> vars = new HashMap<String, Object>();
+        // Integer first: the first call at the site is made with a convertible value, the Byte arrives second
+        vars.put("by", Arrays.asList(5, (byte) 120));
+        assertSecondWideningCallIsChecked("r = ''; for (i = 0; i < 2; i++) { r = 'x'.repeat(by[i]) }; r", vars);
     }
 
     public void testSecondCallAtTheSameSiteIsChecked() throws Exception {

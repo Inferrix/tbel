@@ -39,9 +39,64 @@ public abstract class InvokableAccessor extends BaseAccessor {
 
   protected static Object[] checkInvocation(Method method, Object ctx, Object elCtx, Object[] args) {
     if (elCtx instanceof ExecutionContext) {
-      return ((ExecutionContext) elCtx).checkInvocation(method, ctx, args);
+      return ((ExecutionContext) elCtx).checkInvocation(method, ctx, convertToParameterTypes(method, args));
     }
     return args;
+  }
+
+  /**
+   * The first call at a call site checks the arguments after they are converted to the parameter types
+   * (ReflectiveAccessorOptimizer), while Method.invoke itself accepts widening (Character, Short, Byte to int,
+   * Integer to long, ...) without a conversion. Convert here as well so the checker sees the same types on every call.
+   */
+  private static Object[] convertToParameterTypes(Method method, Object[] args) {
+    if (args == null || args.length == 0) {
+      return args;
+    }
+    Class<?>[] types = method.getParameterTypes();
+    if (types.length != args.length) {
+      return args;
+    }
+    Object[] converted = null;
+    int last = method.isVarArgs() ? types.length - 1 : types.length;
+    for (int i = 0; i < last; i++) {
+      Object arg = args[i];
+      if (arg == null || (!types[i].isPrimitive() && types[i].isInstance(arg))) {
+        continue;
+      }
+      Object value;
+      try {
+        //noinspection unchecked
+        value = convert(arg, types[i]);
+      } catch (Exception e) {
+        // DataConversion has no Byte -> Integer style rule; Method.invoke still widens it
+        value = widenToPrimitive(arg, types[i]);
+      }
+      if (value != arg) {
+        if (converted == null) {
+          converted = args.clone();
+        }
+        converted[i] = value;
+      }
+    }
+    return converted != null ? converted : args;
+  }
+
+  private static Object widenToPrimitive(Object arg, Class<?> type) {
+    if (!type.isPrimitive()) {
+      return arg;
+    }
+    Number n = arg instanceof Character ? Integer.valueOf((Character) arg) : arg instanceof Number ? (Number) arg : null;
+    if (n == null) {
+      return arg;
+    }
+    if (type == int.class) return n.intValue();
+    if (type == long.class) return n.longValue();
+    if (type == short.class) return n.shortValue();
+    if (type == byte.class) return n.byteValue();
+    if (type == float.class) return n.floatValue();
+    if (type == double.class) return n.doubleValue();
+    return arg;
   }
 
   public Class[] getParameterTypes() {
