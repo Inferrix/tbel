@@ -19,8 +19,10 @@
 package org.mvel2.ast;
 
 import org.mvel2.CompileException;
+import org.mvel2.ExecutionContext;
 import org.mvel2.ParserContext;
 import org.mvel2.compiler.ExecutableStatement;
+import org.mvel2.execution.ExecutionArrayList;
 import org.mvel2.integration.VariableResolverFactory;
 import org.mvel2.integration.impl.DefaultLocalVariableResolverFactory;
 import org.mvel2.integration.impl.ItemResolverFactory;
@@ -84,9 +86,10 @@ public class Fold extends ASTNode {
 
     if (constraintEx != null) {
       Collection col = ((Collection) dataEx.getValue(ctx, thisValue, factory));
-      list = new ArrayList(col.size());
+      list = newResult(ctx, col.size());
 
       for (Object o : col) {
+        checkExecution(ctx);
         itemR.value = o;
         if ((Boolean) constraintEx.getValue(ctx, thisValue, itemFactory)) {
           list.add(subEx.getValue(o, thisValue, itemFactory));
@@ -96,8 +99,9 @@ public class Fold extends ASTNode {
     }
     else {
       Collection col = ((Collection) dataEx.getValue(ctx, thisValue, factory));
-      list = new ArrayList(col.size());
+      list = newResult(ctx, col.size());
       for (Object o : col) {
+        checkExecution(ctx);
         list.add(subEx.getValue(itemR.value = o, thisValue, itemFactory));
       }
     }
@@ -117,8 +121,9 @@ public class Fold extends ASTNode {
         throw new CompileException("was expecting type: Collection; but found type: "
             + (x == null ? "null" : x.getClass().getName()), expr, start);
 
-      list = new ArrayList(((Collection) x).size());
+      list = newResult(ctx, ((Collection) x).size());
       for (Object o : (Collection) x) {
+        checkExecution(ctx);
         itemR.value = o;
         if ((Boolean) constraintEx.getValue(ctx, thisValue, itemFactory)) {
           list.add(subEx.getValue(o, thisValue, itemFactory));
@@ -132,13 +137,20 @@ public class Fold extends ASTNode {
         throw new CompileException("was expecting type: Collection; but found type: "
             + (x == null ? "null" : x.getClass().getName()), expr, start);
 
-      list = new ArrayList(((Collection) x).size());
+      list = newResult(ctx, ((Collection) x).size());
       for (Object o : (Collection) x) {
+        checkExecution(ctx);
         list.add(subEx.getValue(itemR.value = o, thisValue, itemFactory));
       }
     }
 
     return list;
+  }
+
+  // inside a sandbox the result list is accounted against the script's memory
+  private static List newResult(Object ctx, int size) {
+    ExecutionContext executionContext = ExecutionContext.of(ctx);
+    return executionContext == null ? new ArrayList(size) : new ExecutionArrayList(executionContext);
   }
 
   public Class getEgressType() {

@@ -439,6 +439,39 @@ public class TbPerCallChecksTest extends TestCase {
         assertEquals(10, ((java.util.List<?>) run("x = {}; with (x) { z = new byte[10] }; x.z")).size());
     }
 
+    // a projection (expr in list) runs the stop flag check per element
+    public void testStopFlagIsCheckedInAProjectionLoop() {
+        ExecutionContext executionContext = new ExecutionContext(parserConfig, 8L * 1024 * 1024);
+        executionContext.stop();
+        Map<String, Object> vars = new HashMap<String, Object>();
+        vars.put("l", Arrays.asList(1, 2, 3));
+        for (String script : new String[] {"($ in l)", "($ in l if $ > 1)"}) {
+            try {
+                executeTbExpression(compileExpression(script), executionContext, vars);
+                fail("expected ScriptExecutionStoppedException for: " + script);
+            } catch (org.mvel2.ScriptExecutionStoppedException expected) {
+                // checked before the first element
+            }
+        }
+    }
+
+    // the result list of a projection is accounted against the script's memory, element by element
+    public void testProjectionResultIsMemoryAccounted() {
+        Map<String, Object> vars = new HashMap<String, Object>();
+        vars.put("l", java.util.Collections.nCopies(200, 1));
+        for (String script : new String[] {
+                "m = {s: 'x'.repeat(2000000)}; (m.s + 'y' in l)",
+                "m = {s: 'x'.repeat(2000000)}; (m.s + 'y' in l if true)"}) {
+            try {
+                run(script, vars);
+                fail("expected ScriptMemoryOverflowException for: " + script);
+            } catch (ScriptMemoryOverflowException expected) {
+                // refused while the list grows, not after 200 x 2MB
+            }
+        }
+        assertEquals(3, ((java.util.List<?>) run("($ * 2 in l)", java.util.Collections.singletonMap("l", Arrays.asList(1, 2, 3)))).size());
+    }
+
     // the with body takes expressions only (a bare while does not parse), so the loop runs in a function called from the body
     public void testStopFlagWorksInsideAWithBody() throws Exception {
         Serializable compiled = compileExpression("function spin() { while (true) { } return 1; } x = {}; with (x) { y = spin() }; 1");
