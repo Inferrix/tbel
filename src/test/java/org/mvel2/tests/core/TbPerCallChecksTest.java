@@ -12,7 +12,9 @@ import org.mvel2.ScriptRuntimeException;
 import org.mvel2.optimizers.OptimizerFactory;
 
 import java.io.Serializable;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -171,6 +173,114 @@ public class TbPerCallChecksTest extends TestCase {
         // silently truncated to 1 on a later call
         try {
             Object res = run("r = ''; for (i = 0; i < 2; i++) { r = 'abcdef'.charAt(v[i]) }; r", vars);
+            fail("expected a conversion error, got " + res);
+        } catch (RuntimeException expected) {
+            assertTrue(String.valueOf(expected.getMessage()), expected.getMessage() != null);
+        }
+    }
+
+    private Constructor<?> arrayListIntConstructor() throws Exception {
+        parserConfig.registerDataType("ArrayList", ArrayList.class, list -> 8L);
+        return ArrayList.class.getConstructor(int.class);
+    }
+
+    public void testConstructorCheckerRunsOnEveryNew() throws Exception {
+        AtomicInteger counter = new AtomicInteger();
+        parserConfig.registerConstructorChecker(arrayListIntConstructor(), (ctx, target, args) -> {
+            counter.incrementAndGet();
+            assertNull(target);
+            if ((Integer) args[0] > 100) {
+                throw new ScriptMemoryOverflowException("capacity too large");
+            }
+            return args;
+        });
+        try {
+            run("r = null; for (i = 0; i < 2; i++) { r = new ArrayList(i == 0 ? 5 : 1000) }; r");
+            fail("expected ScriptMemoryOverflowException");
+        } catch (ScriptMemoryOverflowException expected) {
+            assertEquals(2, counter.get());
+        }
+    }
+
+    public void testConstructorCheckerRunsOnFirstNewWithResidual() throws Exception {
+        AtomicInteger counter = new AtomicInteger();
+        parserConfig.registerConstructorChecker(arrayListIntConstructor(), (ctx, target, args) -> {
+            counter.incrementAndGet();
+            if ((Integer) args[0] > 100) {
+                throw new ScriptMemoryOverflowException("capacity too large");
+            }
+            return args;
+        });
+        try {
+            run("new ArrayList(1000).size()");
+            fail("expected ScriptMemoryOverflowException");
+        } catch (ScriptMemoryOverflowException expected) {
+            assertEquals(1, counter.get());
+        }
+    }
+
+    public void testNegativeCapacityStillFailsInTheJdk() throws Exception {
+        parserConfig.registerConstructorChecker(arrayListIntConstructor(), (ctx, target, args) -> {
+            if ((Integer) args[0] > 100) {
+                throw new ScriptMemoryOverflowException("capacity too large");
+            }
+            return args;
+        });
+        try {
+            run("new ArrayList(-1)");
+            fail("expected the JDK failure");
+        } catch (RuntimeException e) {
+            Throwable t = e;
+            boolean found = false;
+            while (t != null) {
+                if (t.getMessage() != null && t.getMessage().contains("Illegal Capacity: -1")) {
+                    found = true;
+                }
+                t = t.getCause();
+            }
+            assertTrue("expected 'Illegal Capacity: -1' in the cause chain of " + e, found);
+        }
+    }
+
+    public void testConstructorCheckerNotCalledWithoutExecutionContext() throws Exception {
+        AtomicInteger counter = new AtomicInteger();
+        parserConfig.registerConstructorChecker(arrayListIntConstructor(), (ctx, target, args) -> {
+            counter.incrementAndGet();
+            return args;
+        });
+        Serializable compiled = compileExpression("r = null; for (i = 0; i < 2; i++) { r = new ArrayList(i == 0 ? 5 : 1000) }; r");
+        Object res = MVEL.executeExpression(compiled, new HashMap<String, Object>());
+        assertTrue(res instanceof ArrayList);
+        assertEquals(0, counter.get());
+    }
+
+    public void testSecondConstructionWithCharacterArgumentIsChecked() throws Exception {
+        AtomicInteger counter = new AtomicInteger();
+        // the checker only looks at Integer, as the production checkers do
+        parserConfig.registerConstructorChecker(arrayListIntConstructor(), (ctx, target, args) -> {
+            counter.incrementAndGet();
+            if (args[0] instanceof Integer && (Integer) args[0] > 100) {
+                throw new ScriptMemoryOverflowException("capacity too large");
+            }
+            return args;
+        });
+        try {
+            // 'a' = 97 passes, 'e' = 101 must be refused on the second call
+            run("s = 'ae'; r = null; for (i = 0; i < 2; i++) { r = new ArrayList(s.charAt(i)) }; r");
+            fail("expected ScriptMemoryOverflowException");
+        } catch (ScriptMemoryOverflowException expected) {
+            assertEquals(2, counter.get());
+        }
+    }
+
+    public void testSecondConstructionWithOutOfRangeLongStillFails() throws Exception {
+        parserConfig.registerConstructorChecker(arrayListIntConstructor(), (ctx, target, args) -> args);
+        Map<String, Object> vars = new HashMap<String, Object>();
+        vars.put("v", Arrays.asList(1, 4294967297L));
+        // the same Long fails on the first call at a site (ConversionException); it must not be
+        // silently truncated to 1 on a later call
+        try {
+            Object res = run("r = null; for (i = 0; i < 2; i++) { r = new ArrayList(v[i]) }; r", vars);
             fail("expected a conversion error, got " + res);
         } catch (RuntimeException expected) {
             assertTrue(String.valueOf(expected.getMessage()), expected.getMessage() != null);

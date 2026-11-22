@@ -8,6 +8,7 @@ import org.mvel2.util.TriFunction;
 
 import java.io.Serializable;
 import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.util.Arrays;
@@ -69,6 +70,17 @@ public class ExecutionContext implements Serializable {
         TriFunction<ExecutionContext, Object, Object[], Object[]> invocationChecker = this.parserConfig.getMethodInvocationChecker(method);
         if (invocationChecker != null) {
             return invocationChecker.apply(this, ctx, args);
+        }
+        return args;
+    }
+
+    public Object[] checkConstruction(Constructor<?> constructor, Object[] args) {
+        if (args != null && maxAllowedMethodArgs > 0 && args.length > maxAllowedMethodArgs) {
+            throw new ScriptRuntimeException("Maximum method arguments count overflow (" + args.length + " > " + maxAllowedMethodArgs + ")!");
+        }
+        TriFunction<ExecutionContext, Object, Object[], Object[]> constructorChecker = this.parserConfig.getConstructorChecker(constructor);
+        if (constructorChecker != null) {
+            return constructorChecker.apply(this, null, args);
         }
         return args;
     }

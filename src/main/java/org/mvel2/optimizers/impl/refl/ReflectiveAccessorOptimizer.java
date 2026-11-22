@@ -1299,7 +1299,11 @@ public class ReflectiveAccessorOptimizer extends AbstractOptimizer implements Ac
     this.pCtx = pCtx;
 
     try {
-      return compileConstructor(property, ctx, factory);
+      return compileConstructor(property, ctx, thisRef, factory);
+    }
+    catch (ScriptRuntimeException e) {
+      // a constructor checker's refusal, as checkInvocation's is not wrapped either
+      throw e;
     }
     catch (CompileException e) {
       throw ErrorUtil.rewriteIfNeeded(e, property, this.start);
@@ -1326,7 +1330,7 @@ public class ReflectiveAccessorOptimizer extends AbstractOptimizer implements Ac
   }
 
   @SuppressWarnings({"WeakerAccess"})
-  private AccessorNode compileConstructor(char[] expression, Object ctx, VariableResolverFactory vars) throws
+  private AccessorNode compileConstructor(char[] expression, Object ctx, Object thisRef, VariableResolverFactory vars) throws
       InstantiationException, IllegalAccessException, InvocationTargetException,
       ClassNotFoundException, NoSuchMethodException {
 
@@ -1364,11 +1368,12 @@ public class ReflectiveAccessorOptimizer extends AbstractOptimizer implements Ac
         //noinspection unchecked
         parms[i] = convert(parms[i], paramTypeVarArgsSafe(cns.getParameterTypes(), i, cns.isVarArgs()));
       }
-      parms = normalizeArgsForVarArgs(cns.getParameterTypes(), parms, cns.isVarArgs());
-
       AccessorNode ca = new ConstructorAccessor(cns, cStmts);
 
       if (cnsRes.length > 1) {
+        // the first call is made here; without a residual it is made by the ConstructorAccessor, which checks it
+        parms = checkConstruction(cns, thisRef, parms);
+        parms = normalizeArgsForVarArgs(cns.getParameterTypes(), parms, cns.isVarArgs());
         ReflectiveAccessorOptimizer compiledOptimizer
             = new ReflectiveAccessorOptimizer(pCtx, cnsRes[1].toCharArray(), 0, cnsRes[1].length(),
             cns.newInstance(parms), ctx, vars);
@@ -1432,6 +1437,14 @@ public class ReflectiveAccessorOptimizer extends AbstractOptimizer implements Ac
       className = cls.getName() + ".";
     }
     return className;
+  }
+
+  private Object[] checkConstruction(Constructor<?> constructor, Object thisRef, Object[] args) {
+    if (thisRef instanceof ExecutionContext) {
+      return ((ExecutionContext) thisRef).checkConstruction(constructor, args);
+    } else {
+      return args;
+    }
   }
 
   private Object[] checkInvocation(Method method, Object ctx, Object[] args) {

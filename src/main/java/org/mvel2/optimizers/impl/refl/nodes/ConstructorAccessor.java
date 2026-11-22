@@ -18,6 +18,7 @@
  */
 package org.mvel2.optimizers.impl.refl.nodes;
 
+import org.mvel2.ScriptRuntimeException;
 import org.mvel2.compiler.ExecutableStatement;
 import org.mvel2.integration.VariableResolverFactory;
 
@@ -31,10 +32,10 @@ public class ConstructorAccessor extends InvokableAccessor {
       if (!coercionNeeded) {
         try {
           if (nextNode != null) {
-            return nextNode.getValue(constructor.newInstance(executeAll(elCtx, variableFactory)), elCtx, variableFactory);
+            return nextNode.getValue(constructor.newInstance(checkConstruction(constructor, elCtx, executeAll(elCtx, variableFactory))), elCtx, variableFactory);
           }
           else {
-            return constructor.newInstance(executeAll(elCtx, variableFactory));
+            return constructor.newInstance(checkConstruction(constructor, elCtx, executeAll(elCtx, variableFactory)));
           }
         }
         catch (IllegalArgumentException e) {
@@ -45,15 +46,21 @@ public class ConstructorAccessor extends InvokableAccessor {
       }
       else {
         if (nextNode != null) {
-          return nextNode.getValue(constructor.newInstance(executeAndCoerce(parameterTypes, elCtx, variableFactory, constructor.isVarArgs())),
+          return nextNode.getValue(constructor.newInstance(checkConstruction(constructor, elCtx, executeAndCoerce(parameterTypes, elCtx, variableFactory, constructor.isVarArgs()))),
               elCtx, variableFactory);
         }
         else {
-          return constructor.newInstance(executeAndCoerce(parameterTypes, elCtx, variableFactory, constructor.isVarArgs()));
+          return constructor.newInstance(checkConstruction(constructor, elCtx, executeAndCoerce(parameterTypes, elCtx, variableFactory, constructor.isVarArgs())));
         }
       }
     }
+    catch (ScriptRuntimeException e) {
+      throw e;
+    }
     catch (Exception e) {
+      if (e.getCause() instanceof ScriptRuntimeException) {
+        throw (ScriptRuntimeException) e.getCause();
+      }
       throw new RuntimeException("cannot construct object", e);
     }
   }

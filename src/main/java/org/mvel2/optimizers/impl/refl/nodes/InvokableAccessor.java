@@ -5,6 +5,7 @@ import org.mvel2.compiler.ExecutableStatement;
 import org.mvel2.integration.VariableResolverFactory;
 
 import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 
 import static org.mvel2.DataConversion.convert;
@@ -39,26 +40,32 @@ public abstract class InvokableAccessor extends BaseAccessor {
 
   protected static Object[] checkInvocation(Method method, Object ctx, Object elCtx, Object[] args) {
     if (elCtx instanceof ExecutionContext) {
-      return ((ExecutionContext) elCtx).checkInvocation(method, ctx, convertToParameterTypes(method, args));
+      return ((ExecutionContext) elCtx).checkInvocation(method, ctx, convertToParameterTypes(method.getParameterTypes(), method.isVarArgs(), args));
+    }
+    return args;
+  }
+
+  protected static Object[] checkConstruction(Constructor<?> constructor, Object elCtx, Object[] args) {
+    if (elCtx instanceof ExecutionContext) {
+      return ((ExecutionContext) elCtx).checkConstruction(constructor, convertToParameterTypes(constructor.getParameterTypes(), constructor.isVarArgs(), args));
     }
     return args;
   }
 
   /**
    * The first call at a call site checks the arguments after they are converted to the parameter types
-   * (ReflectiveAccessorOptimizer), while Method.invoke itself accepts widening (Character, Short, Byte to int,
+   * (ReflectiveAccessorOptimizer), while Method.invoke and Constructor.newInstance themselves accept widening (Character, Short, Byte to int,
    * Integer to long, ...) without a conversion. Convert here as well so the checker sees the same types on every call.
    */
-  private static Object[] convertToParameterTypes(Method method, Object[] args) {
+  private static Object[] convertToParameterTypes(Class<?>[] types, boolean isVarArgs, Object[] args) {
     if (args == null || args.length == 0) {
       return args;
     }
-    Class<?>[] types = method.getParameterTypes();
     if (types.length != args.length) {
       return args;
     }
     Object[] converted = null;
-    int last = method.isVarArgs() ? types.length - 1 : types.length;
+    int last = isVarArgs ? types.length - 1 : types.length;
     for (int i = 0; i < last; i++) {
       Object arg = args[i];
       if (arg == null || (!types[i].isPrimitive() && types[i].isInstance(arg))) {

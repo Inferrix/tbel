@@ -5,6 +5,7 @@ package org.mvel2;
 import org.mvel2.compiler.AbstractParser;
 import org.mvel2.util.TriFunction;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
@@ -17,6 +18,8 @@ public class SandboxedParserConfiguration extends ParserConfiguration {
     private final Map<Class<?>, Function<Object, Long>> additionalDataTypes = new HashMap<>();
 
     private final Map<Method, TriFunction<ExecutionContext, Object, Object[], Object[]>> invocationCheckers = new HashMap<>();
+
+    private final Map<Constructor<?>, TriFunction<ExecutionContext, Object, Object[], Object[]>> constructorCheckers = new HashMap<>();
 
     private SandboxedClassLoader sanboxedClassLoader = new SandboxedClassLoader();
 
@@ -132,5 +135,13 @@ public class SandboxedParserConfiguration extends ParserConfiguration {
 
     public TriFunction<ExecutionContext, Object, Object[], Object[]> getMethodInvocationChecker(Method method) {
         return this.invocationCheckers.get(method);
+    }
+
+    public void registerConstructorChecker(Constructor<?> constructor, TriFunction<ExecutionContext, Object, Object[], Object[]> constructorCheckerFunction) {
+        this.constructorCheckers.put(constructor, constructorCheckerFunction);
+    }
+
+    public TriFunction<ExecutionContext, Object, Object[], Object[]> getConstructorChecker(Constructor<?> constructor) {
+        return this.constructorCheckers.get(constructor);
     }
 }
