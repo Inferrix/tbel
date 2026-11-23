@@ -370,6 +370,15 @@ public class ExecutionContext implements Serializable {
         return String.valueOf(value);
     }
 
+    public static boolean anyWalkable(Iterable<?> values) {
+        for (Object value : values) {
+            if (walkable(value)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static boolean walkable(Object value) {
         return value instanceof Collection || value instanceof Map || value instanceof Map.Entry || value instanceof Object[] || value instanceof Optional
                 || value instanceof Iterable || value instanceof Iterator || value instanceof BaseStream;

@@ -367,6 +367,92 @@ public class TbExpandedSizeTest extends TestCase {
         assertTrue((System.nanoTime() - start) / 1_000_000 < 3000);
     }
 
+    // the argument is compared with every element (o.equals(element)): a map hashes its own keys on the way, a list holds one: both are walked, with one element too, nested in a list too
+    public void testAnArgumentThatHoldsAReusedListIsRefusedWhereverItIsNested() {
+        String head = "a = ['x']; for (int i = 0; i < 27; i++) { a = [a, a]; } k = []; o = {}; o.put(k, 1); k.add(a); k.add(a); l = [{'q': 1}]; ";
+        for (String call : new String[] {"l.indexOf(o)", "l.lastIndexOf(o)", "l.contains(o)", "l.remove(o)", "l.indexOf([o])", "l.contains([o])", "l.remove([o])"}) {
+            assertRefused(head + call);
+        }
+    }
+
+    // an element that the argument is never compared with (another type, another size) costs nothing: no multiple of the argument
+    public void testAnArgumentIsNotMultipliedByElementsItIsNotComparedWith() {
+        String o = "o = {}; for (int i = 0; i < 500; i++) { o.put('k' + i, i); } ";
+        assertEquals(Boolean.FALSE, run(o + "l = []; for (int i = 0; i < 5000; i++) { l.add({'id': i}); } l.contains(o)"));
+        assertEquals(-1, run(o + "l = []; for (int i = 0; i < 5000; i++) { l.add(i); } l.indexOf(o)"));
+    }
+
+    private static org.mvel2.execution.ExecutionArrayList<Object> reusedList(ExecutionContext context, int depth) {
+        org.mvel2.execution.ExecutionArrayList<Object> a = new org.mvel2.execution.ExecutionArrayList<>(context);
+        a.add("x");
+        for (int i = 0; i < depth; i++) {
+            org.mvel2.execution.ExecutionArrayList<Object> b = new org.mvel2.execution.ExecutionArrayList<>(context);
+            context.checkAssignGlobalVariable("a", a);
+            b.add(a);
+            b.add(a);
+            a = b;
+        }
+        context.checkAssignGlobalVariable("a", a);
+        return a;
+    }
+
+    // a set element or a map key that is compared with an existing one hashes the existing one's members: the receiver is walked too, not only the argument
+    public void testAnAddAllOrPutAllThatComparesWithAnElementNobodyWalkedIsRefused() {
+        ExecutionContext context = new ExecutionContext(parserConfig, 8L * 1024 * 1024);
+        org.mvel2.execution.ExecutionArrayList<Object> kk = new org.mvel2.execution.ExecutionArrayList<>(context);
+        org.mvel2.execution.ExecutionLinkedHashSet<Object> k = new org.mvel2.execution.ExecutionLinkedHashSet<>(context);
+        k.add(kk);
+        org.mvel2.execution.ExecutionLinkedHashSet<Object> set = new org.mvel2.execution.ExecutionLinkedHashSet<>(context);
+        set.add(k);
+        org.mvel2.execution.ExecutionHashMap<Object, Object> map = new org.mvel2.execution.ExecutionHashMap<>(4, context);
+        map.put(k, 1);
+        org.mvel2.execution.ExecutionArrayList<Object> a = reusedList(context, 22);
+        kk.add(a); // after kk is in the set and in the map, as a script can
+        kk.add(a);
+        org.mvel2.execution.ExecutionHashMap<Object, Object> other = new org.mvel2.execution.ExecutionHashMap<>(4, context);
+        other.put(1, 1);
+        try {
+            set.addAll(java.util.List.of(other.keySet()));
+            fail("expected ScriptMemoryOverflowException");
+        } catch (ScriptMemoryOverflowException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().startsWith("Max expanded size overflow"));
+        }
+        try {
+            map.putAll(java.util.Map.of(other.keySet(), 2));
+            fail("expected ScriptMemoryOverflowException");
+        } catch (ScriptMemoryOverflowException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().startsWith("Max expanded size overflow"));
+        }
+        org.mvel2.execution.ExecutionLinkedHashSet<Object> small = new org.mvel2.execution.ExecutionLinkedHashSet<>(context);
+        small.add(new org.mvel2.execution.ExecutionArrayList<Object>(context));
+        org.mvel2.execution.ExecutionArrayList<Object> one = new org.mvel2.execution.ExecutionArrayList<>(context);
+        one.add(2);
+        assertTrue(small.addAll(java.util.List.of(one, 3)));
+        assertEquals(3, small.size());
+        assertEquals(2, run("n = {}; n.put([1], 1); m = {}; m.put([2], 2); n.putAll(m); n.size()"));
+    }
+
+    // the entry set of an unmodifiable map asks its own set whether it contains each entry of the argument, whatever the outer call walked
+    public void testAnUnmodifiableEntrySetEqualsChecksItsArgument() {
+        ExecutionContext context = new ExecutionContext(parserConfig, 8L * 1024 * 1024);
+        org.mvel2.execution.ExecutionHashMap<Object, Object> map = new org.mvel2.execution.ExecutionHashMap<>(4, context);
+        map.put("x", 1);
+        java.util.Set<?> entries = ((java.util.Map<Object, Object>) map.toUnmodifiable()).entrySet();
+        org.mvel2.execution.ExecutionArrayList<Object> key = new org.mvel2.execution.ExecutionArrayList<>(context);
+        java.util.Set<Object> other = new java.util.HashSet<>();
+        other.add(new java.util.AbstractMap.SimpleEntry<Object, Object>(key, 1));
+        org.mvel2.execution.ExecutionArrayList<Object> a = reusedList(context, 22);
+        key.add(a);
+        key.add(a);
+        context.beginExpansion(new Object());
+        try {
+            entries.equals(other);
+            fail("expected ScriptMemoryOverflowException");
+        } catch (ScriptMemoryOverflowException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().startsWith("Max expanded size overflow"));
+        }
+    }
+
     public void testAnUnlimitedContextIsNotChecked() {
         executionContext = new ExecutionContext(parserConfig, 0);
         assertEquals(Boolean.TRUE, run("a = ['x']; for (int i = 0; i < 10; i++) { a = [a, a]; } a.toString().length() > 0"));

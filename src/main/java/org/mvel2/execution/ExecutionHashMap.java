@@ -85,6 +85,10 @@ public class ExecutionHashMap<K, V> extends LinkedHashMap<K, V> implements Execu
     @Override
     public void putAll(Map<? extends K, ? extends V> m) {
         // every key of the argument is hashed: the walk of the argument bounds the call (keys with the same hash and different content are compared one by one inside a bucket: not bounded, ledgered)
+        // a key that holds members is compared with the existing keys of its bucket, and their members are hashed whatever the walk of the argument approved: this map is walked too
+        if (ExecutionContext.anyWalkable(m.keySet())) {
+            this.executionContext.checkExpansion(this);
+        }
         boolean outermost = this.executionContext.beginExpansion(m);
         try {
             super.putAll(m);

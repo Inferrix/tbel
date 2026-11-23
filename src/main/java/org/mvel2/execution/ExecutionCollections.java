@@ -598,9 +598,17 @@ public class ExecutionCollections {
                 if (o == this)
                     return true;
 
-                return o instanceof Set<?> s
-                        && s.size() == c.size()
-                        && containsAll(s); // Invokes safe containsAll() above
+                // the entries of the argument are hashed and compared with this set: both are walked, also inside an outer walk
+                if (!(o instanceof Set<?> s) || s.size() != c.size()) {
+                    return false;
+                }
+                executionContext.checkExpansion(s);
+                boolean outermost = executionContext.beginExpansion(c);
+                try {
+                    return containsAll(s); // Invokes safe containsAll() above
+                } finally {
+                    executionContext.endExpansion(outermost);
+                }
             }
 
             /**

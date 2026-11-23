@@ -130,10 +130,21 @@ public class ExecutionArrayList<E> extends ArrayList<E> implements ExecutionObje
         return false;
     }
 
-    // the argument is the receiver of equals (o.equals(element)): a map hashes its own keys for every element it is compared with, whatever the element holds
-    private void checkMapArgument(Object o) {
-        if (o instanceof Map) {
-            this.executionContext.checkExpansionTimes(o, size());
+    // the argument is the receiver of equals (o.equals(element)) and the outer walk below approves the elements only: it is walked, whatever it is;
+    // a map hashes its own keys for every element of its size that it is compared with (any other element is answered false at once)
+    private void checkArgument(Object o) {
+        if (ExecutionContext.walkable(o)) {
+            this.executionContext.checkExpansion(o);
+            if (o instanceof Map) {
+                int size = ((Map<?, ?>) o).size();
+                long compared = 0;
+                for (E element : this) {
+                    if (element instanceof Map && ((Map<?, ?>) element).size() == size) {
+                        compared++;
+                    }
+                }
+                this.executionContext.checkExpansionTimes(o, compared);
+            }
         }
     }
 
@@ -141,7 +152,7 @@ public class ExecutionArrayList<E> extends ArrayList<E> implements ExecutionObje
     // of this list (the sum of what the elements expand to) bounds the call; contains() calls indexOf()
     @Override
     public int indexOf(Object o) {
-        this.checkMapArgument(o);
+        this.checkArgument(o);
         boolean outermost = ExecutionContext.walkable(o) && this.executionContext.beginExpansion(this);
         try {
             return super.indexOf(o);
@@ -152,7 +163,7 @@ public class ExecutionArrayList<E> extends ArrayList<E> implements ExecutionObje
 
     @Override
     public int lastIndexOf(Object o) {
-        this.checkMapArgument(o);
+        this.checkArgument(o);
         boolean outermost = ExecutionContext.walkable(o) && this.executionContext.beginExpansion(this);
         try {
             return super.lastIndexOf(o);
