@@ -9,6 +9,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.mvel2.util.ArrayTools.initEndIndex;
@@ -129,10 +130,18 @@ public class ExecutionArrayList<E> extends ArrayList<E> implements ExecutionObje
         return false;
     }
 
+    // the argument is the receiver of equals (o.equals(element)): a map hashes its own keys for every element it is compared with, whatever the element holds
+    private void checkMapArgument(Object o) {
+        if (o instanceof Map) {
+            this.executionContext.checkExpansionTimes(o, size());
+        }
+    }
+
     // one call compares the argument with every element: a container argument is compared as many times as there are elements, so the walk
     // of this list (the sum of what the elements expand to) bounds the call; contains() calls indexOf()
     @Override
     public int indexOf(Object o) {
+        this.checkMapArgument(o);
         boolean outermost = ExecutionContext.walkable(o) && this.executionContext.beginExpansion(this);
         try {
             return super.indexOf(o);
@@ -143,6 +152,7 @@ public class ExecutionArrayList<E> extends ArrayList<E> implements ExecutionObje
 
     @Override
     public int lastIndexOf(Object o) {
+        this.checkMapArgument(o);
         boolean outermost = ExecutionContext.walkable(o) && this.executionContext.beginExpansion(this);
         try {
             return super.lastIndexOf(o);

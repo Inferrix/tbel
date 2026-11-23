@@ -77,14 +77,14 @@ public class ExecutionHashMap<K, V> extends LinkedHashMap<K, V> implements Execu
     public Set<Entry<K, V>> entrySet() {
         Set<Entry<K, V>> executionEntries = new ExecutionLinkedHashSet<>(this.executionContext);
         for (Entry<K, V> entry : super.entrySet()) {
-            executionEntries.add(new ExecutionEntry<>(entry.getKey(), entry.getValue()));
+            executionEntries.add(new ExecutionEntry<>(entry.getKey(), entry.getValue(), this.executionContext));
         }
         return executionEntries;
     }
 
     @Override
     public void putAll(Map<? extends K, ? extends V> m) {
-        // every key of the argument is hashed: the walk of the argument bounds the call
+        // every key of the argument is hashed: the walk of the argument bounds the call (keys with the same hash and different content are compared one by one inside a bucket: not bounded, ledgered)
         boolean outermost = this.executionContext.beginExpansion(m);
         try {
             super.putAll(m);

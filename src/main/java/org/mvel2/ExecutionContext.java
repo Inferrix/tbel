@@ -274,6 +274,23 @@ public class ExecutionContext implements Serializable {
         }
     }
 
+    /** Refuses a call that does the work of walking root once for each of count elements (count x the expanded size of root above the bound). */
+    public void checkExpansionTimes(Object root, long count) {
+        if (maxAllowedMemory > 0 && count > 1 && walkable(root)) {
+            try {
+                long size = expandedSize(root, 0);
+                long limit = maxAllowedMemory * EXPANSION_FACTOR;
+                if (size > 0 && count > limit / size) {
+                    throw new ScriptMemoryOverflowException("Max expanded size overflow (" + count + " x " + size + " > " + limit + ")!");
+                }
+            } finally {
+                if (!expansionScratch.isEmpty()) {
+                    expansionScratch.clear();
+                }
+            }
+        }
+    }
+
     /**
      * Checks the structure unless an outer call already did (the inner toString, hashCode and equals of the elements are part of that walk:
      * checking each of them again costs depth x size). Returns true to the outermost call, that must pass it to endExpansion.

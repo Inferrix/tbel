@@ -35,7 +35,7 @@ public class ExecutionLinkedHashSet<E> extends LinkedHashSet<E> implements Execu
         return false;
     }
 
-    // every element of the argument is hashed: the walk of the argument (the sum of what its elements expand to) bounds the call
+    // every element of the argument is hashed: the walk of the argument (the sum of what its elements expand to) bounds the call (elements with the same hash and different content are compared one by one inside a bucket: not bounded, ledgered)
     @Override
     public boolean addAll(Collection<? extends E> c) {
         boolean outermost = this.executionContext.beginExpansion(c);

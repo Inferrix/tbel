@@ -275,6 +275,45 @@ public class TbExpandedSizeTest extends TestCase {
         assertFalse(set.equals(a));
     }
 
+    // an entry of an ExecutionHashMap is an ExecutionObject that every walk skips: a map keyed and valued by the previous entry doubles at each step
+    public void testAnEntryThatHoldsItselfTwiceIsRefused() {
+        String build = "m = {'k': 'v'}; e = null; for (x : m.entrySet()) { e = x; } for (int i = 0; i < 22; i++) { n = {}; n.put(e, e); for (x : n.entrySet()) { e = x; } } ";
+        for (String use : new String[] {"e.toString().length()", "('' + e).length()", "e.hashCode()", "e.equals(e)", "u = [e]; u.toUnmodifiable().toString().length()"}) {
+            assertRefused(build + use);
+        }
+        assertEquals("k=v", run("m = {'k': 'v'}; for (x : m.entrySet()) { return x.toString(); }"));
+    }
+
+    // built by hand: the script that builds the entry hashes it at every step and is refused there, before any use
+    public void testAnEntryHoldingItselfTwiceIsRefusedWhereItIsPrinted() {
+        ExecutionContext context = new ExecutionContext(parserConfig, 8L * 1024 * 1024);
+        Object e = new org.mvel2.execution.ExecutionEntry<Object, Object>("k", "v", context);
+        for (int i = 0; i < 24; i++) {
+            e = new org.mvel2.execution.ExecutionEntry<Object, Object>(e, e, context);
+        }
+        final Object entry = e;
+        for (java.util.concurrent.Callable<Object> use : java.util.Arrays.<java.util.concurrent.Callable<Object>>asList(entry::toString, entry::hashCode, () -> entry.equals(new org.mvel2.execution.ExecutionEntry<Object, Object>(entry, entry, context)))) {
+            try {
+                use.call();
+                fail("expected ScriptMemoryOverflowException");
+            } catch (ScriptMemoryOverflowException expected) {
+                assertTrue(expected.getMessage(), expected.getMessage().startsWith("Max expanded size overflow"));
+            } catch (Exception other) {
+                throw new AssertionError(other);
+            }
+        }
+    }
+
+    // arg.equals(element): AbstractMap.equals hashes the keys of the argument for every element, whatever the element holds
+    public void testIndexOfWithAMapArgumentIsBoundedByTheArgumentTimesTheElements() {
+        String o = "a = ['x']; for (int i = 0; i < 21; i++) { a = [a, a]; } o = {}; o.put(a, 1); big = []; for (int i = 0; i < 40; i++) { big.add({'q': 1}); } ";
+        for (String call : new String[] {"big.indexOf(o)", "big.contains(o)", "big.lastIndexOf(o)", "big.remove(o)"}) {
+            assertRefused(o + call);
+        }
+        assertEquals(1, run("big = [{'q': 1}, {'r': 2}]; big.indexOf({'r': 2})"));
+        assertEquals(Boolean.TRUE, run("big = [{'q': 1}, {'r': 2}]; big.contains({'q': 1})"));
+    }
+
     private static final String DAG20_REFS = "a = ['x']; for (int i = 0; i < 20; i++) { a = [a, a]; } big = []; for (int i = 0; i < 40; i++) { big.add(a); } ";
 
     // a copy or a view of a list is a plain java.util collection: every operator that prints its operand walks it first
