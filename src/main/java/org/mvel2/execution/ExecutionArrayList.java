@@ -9,7 +9,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.mvel2.util.ArrayTools.initEndIndex;
@@ -130,30 +129,10 @@ public class ExecutionArrayList<E> extends ArrayList<E> implements ExecutionObje
         return false;
     }
 
-    // the argument is the receiver of equals (o.equals(element)) and the outer walk below approves the elements only: it is walked, whatever it is;
-    // a map hashes its own keys for every element of its size that it is compared with (any other element is answered false at once)
-    private void checkArgument(Object o) {
-        if (ExecutionContext.walkable(o)) {
-            this.executionContext.checkExpansion(o);
-            if (o instanceof Map) {
-                int size = ((Map<?, ?>) o).size();
-                long compared = 0;
-                for (E element : this) {
-                    if (element instanceof Map && ((Map<?, ?>) element).size() == size) {
-                        compared++;
-                    }
-                }
-                this.executionContext.checkExpansionTimes(o, compared);
-            }
-        }
-    }
-
-    // one call compares the argument with every element: a container argument is compared as many times as there are elements, so the walk
-    // of this list (the sum of what the elements expand to) bounds the call; contains() calls indexOf()
+    // the argument is the receiver of equals (o.equals(element)): see ExecutionContext.beginCompare; contains() calls indexOf()
     @Override
     public int indexOf(Object o) {
-        this.checkArgument(o);
-        boolean outermost = ExecutionContext.walkable(o) && this.executionContext.beginExpansion(this);
+        boolean outermost = this.executionContext.beginCompare(o, this, this);
         try {
             return super.indexOf(o);
         } finally {
@@ -163,8 +142,7 @@ public class ExecutionArrayList<E> extends ArrayList<E> implements ExecutionObje
 
     @Override
     public int lastIndexOf(Object o) {
-        this.checkArgument(o);
-        boolean outermost = ExecutionContext.walkable(o) && this.executionContext.beginExpansion(this);
+        boolean outermost = this.executionContext.beginCompare(o, this, this);
         try {
             return super.lastIndexOf(o);
         } finally {

@@ -264,29 +264,22 @@ public class ExecutionContext implements Serializable {
      */
     public void checkExpansion(Object root) {
         if (maxAllowedMemory > 0 && walkable(root)) {
-            try {
-                expandedSize(root, 0);
-            } finally {
-                if (!expansionScratch.isEmpty()) {
-                    expansionScratch.clear();
-                }
-            }
+            walkRoot(root);
         }
     }
 
-    /** Refuses a call that does the work of walking root once for each of count elements (count x the expanded size of root above the bound). */
-    public void checkExpansionTimes(Object root, long count) {
-        if (maxAllowedMemory > 0 && count > 1 && walkable(root)) {
-            try {
-                long size = expandedSize(root, 0);
-                long limit = maxAllowedMemory * EXPANSION_FACTOR;
-                if (size > 0 && count > limit / size) {
-                    throw new ScriptMemoryOverflowException("Max expanded size overflow (" + count + " x " + size + " > " + limit + ")!");
-                }
-            } finally {
-                if (!expansionScratch.isEmpty()) {
-                    expansionScratch.clear();
-                }
+    // what the last walk met: a Map hashes its own keys for every element it is compared with, a Set hashes the members of the element it is compared with
+    private boolean sawMap;
+    private boolean sawSet;
+
+    private long walkRoot(Object root) {
+        sawMap = false;
+        sawSet = false;
+        try {
+            return expandedSize(root, 0);
+        } finally {
+            if (!expansionScratch.isEmpty()) {
+                expansionScratch.clear();
             }
         }
     }
@@ -300,6 +293,63 @@ public class ExecutionContext implements Serializable {
             return false;
         }
         checkExpansion(root);
+        expanding = true;
+        return true;
+    }
+
+    /**
+     * A call that compares its argument with every element of the receiver (arg.equals(element): indexOf, contains, remove, containsValue). The
+     * argument is walked, whatever it is nested in (the outer walk approves the elements only). A comparison costs no more than the argument expands to, so
+     * the elements need no walk when elements times argument is under the bound, unless the argument holds a Set (it hashes the members of the element it is
+     * compared with, whatever the argument is). Past the bound the receiver is walked (the elements' expansions add up), and a Map in the argument (it hashes its own
+     * keys for every element it is compared with, whatever the element holds) is multiplied by the elements it can be compared with. Returns true to the
+     * outermost call, that must pass it to endExpansion.
+     */
+    public boolean beginCompare(Object arg, Object receiver, Collection<?> elements) {
+        if (maxAllowedMemory <= 0 || !walkable(arg) || arg instanceof Iterator || arg instanceof BaseStream) {
+            return false;
+        }
+        long size = walkRoot(arg);
+        boolean walkReceiver = sawSet;
+        long limit = maxAllowedMemory * EXPANSION_FACTOR;
+        if (size > 0 && elements.size() > limit / size) {
+            walkReceiver = true;
+            if (sawMap) {
+                long compared = 0;
+                for (Object element : elements) {
+                    if (arg instanceof Map ? element instanceof Map && ((Map<?, ?>) element).size() == ((Map<?, ?>) arg).size() : walkable(element)) {
+                        compared++;
+                    }
+                }
+                if (compared > limit / size) {
+                    throw new ScriptMemoryOverflowException("Max expanded size overflow (" + compared + " x " + size + " > " + limit + ")!");
+                }
+            }
+        }
+        if (expanding) {
+            return false;
+        }
+        if (walkReceiver) {
+            checkExpansion(receiver);
+        }
+        expanding = true;
+        return true;
+    }
+
+    /**
+     * A call that stores the elements or keys of its argument in the receiver (addAll, putAll): the argument is walked, and when it holds a Set (its equals
+     * hashes the members of an existing element of the same bucket, whose hash is that of what it held when it was stored) the receiver is walked too.
+     */
+    public boolean beginStore(Object arg, Object receiver) {
+        if (expanding || maxAllowedMemory <= 0) {
+            return false;
+        }
+        if (walkable(arg)) {
+            walkRoot(arg);
+            if (sawSet) {
+                checkExpansion(receiver);
+            }
+        }
         expanding = true;
         return true;
     }
@@ -370,15 +420,6 @@ public class ExecutionContext implements Serializable {
         return String.valueOf(value);
     }
 
-    public static boolean anyWalkable(Iterable<?> values) {
-        for (Object value : values) {
-            if (walkable(value)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     public static boolean walkable(Object value) {
         return value instanceof Collection || value instanceof Map || value instanceof Map.Entry || value instanceof Object[] || value instanceof Optional
                 || value instanceof Iterable || value instanceof Iterator || value instanceof BaseStream;
@@ -425,6 +466,7 @@ public class ExecutionContext implements Serializable {
             marked = mark(value, mark(value, false, entry.getKey()), entry.getValue());
             size = 4 + expandedSize(entry.getKey(), depth + 1) + expandedSize(entry.getValue(), depth + 1);
         } else if (value instanceof Map) {
+            sawMap = true;
             // forEach, not entrySet: the entry set of an ExecutionHashMap is a new set, hashed and accounted for every time it is asked for
             long[] total = {0};
             boolean[] nested = {false};
@@ -440,6 +482,7 @@ public class ExecutionContext implements Serializable {
             marked = mark(value, false, element);
             size = 2 + expandedSize(element, depth + 1);
         } else {
+            sawSet |= value instanceof Set;
             Iterable<?> elements = value instanceof Object[] ? Arrays.asList((Object[]) value) : (Iterable<?>) value;
             for (Object element : elements) {
                 marked = mark(value, marked, element);

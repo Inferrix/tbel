@@ -77,6 +77,7 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 import static java.lang.Double.parseDouble;
+import static org.mvel2.ExecutionContext.checkOperand;
 import static org.mvel2.ExecutionContext.stringOf;
 import static java.lang.System.arraycopy;
 import static java.lang.Thread.currentThread;
@@ -755,13 +756,16 @@ public class ParseTools {
       return false;
     else if (compareTo instanceof String)
       return ((String) compareTo).contains(stringOf(compareTest));
-    else if (compareTo instanceof Collection)
+    else if (compareTo instanceof Collection) {
+      checkOperand(compareTo); // a plain copy compares each element as a call of its own
       return ((Collection) compareTo).contains(compareTest);
+    }
     else if (compareTo instanceof Map)
       return ((Map) compareTo).containsKey(compareTest);
     else if (compareTo.getClass().isArray()) {
       if (compareTo.getClass().getComponentType().isPrimitive())
         return containsCheckOnPrimitveArray(compareTo, compareTest);
+      checkOperand(compareTo);
       for (Object o : ((Object[]) compareTo)) {
         if (compareTest == null && o == null)
           return true;

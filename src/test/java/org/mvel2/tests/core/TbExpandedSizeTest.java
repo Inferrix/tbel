@@ -453,6 +453,71 @@ public class TbExpandedSizeTest extends TestCase {
         }
     }
 
+    private static final String D22 = "x = ['x']; for (int i = 0; i < 22; i++) { x = [x, x]; } ";
+
+    // entrySet(), the loop over a map and reverse() hash every entry or key: that is one walk of the map, not one per entry (each entry guards only itself)
+    public void testAMapThatIsWalkedEntryByEntryIsOneWalk() {
+        assertRefused(D22 + "m = {}; for (int i = 0; i < 200; i++) { m.put(i, x); } c = 0; for (e : m) { c++; } c");
+        assertRefused(D22 + "m = {}; for (int i = 0; i < 200; i++) { m.put(i, x); } m.entrySet().size()");
+        assertRefused(D22 + "m = {}; ks = []; for (int i = 0; i < 50; i++) { k = [i]; m.put(k, 1); ks.add(k); } for (k : ks) { k.add(x); } m.reverse(); m.size()");
+        assertRefused(D22 + "m = {}; ks = []; for (int i = 0; i < 50; i++) { k = [i]; m.put(k, 1); ks.add(k); } for (k : ks) { k.add(x); } m.toReversed().size()");
+        assertEquals(2, run("m = {'a': 1, 'b': [2]}; c = 0; for (e : m) { c++; } c"));
+        assertEquals(Boolean.TRUE, run("m = {'a': 1, 'b': 2}; m.reverse(); m.keys().get(0) == 'b'"));
+    }
+
+    public void testContainsValueBoundsTheArgumentTimesTheValues() {
+        String two = "c = ['x']; for (int i = 0; i < 22; i++) { c = [c, c]; } d = ['x']; for (int i = 0; i < 22; i++) { d = [d, d]; } x = [c, 'y']; b = [d, 'z']; ";
+        assertRefused(two + "m = {}; for (int i = 0; i < 100; i++) { m.put(i, b); } m.containsValue(x)");
+        assertEquals(Boolean.TRUE, run("m = {'a': [1], 'b': [2]}; m.containsValue([2])"));
+        assertEquals(Boolean.FALSE, run("m = {'a': [1], 'b': [2]}; m.containsValue([3])"));
+    }
+
+    // a map inside the argument is hashed for every element it can be compared with, whatever the element holds: a list or an entry that holds the map counts too
+    public void testAMapNestedInTheArgumentIsMultiplied() {
+        String head = D22 + "o = {}; o.put(x, 1); p = [{'q': 1}]; l = []; for (int i = 0; i < 100; i++) { l.add(p); } ";
+        assertRefused(head + "l.indexOf([o])");
+        assertRefused(head + "l.contains([o])");
+        assertRefused(head + "l.remove([o])");
+        assertEquals(-1, run("o = {'a': 1}; l = []; for (int i = 0; i < 100; i++) { l.add([{'q': 1}]); } l.indexOf([o])"));
+    }
+
+    // 'contains' on a plain copy compares every element of it, each as its own call: the copy is walked first
+    public void testContainsOnAPlainCopyIsWalked() {
+        String two = "c = ['x']; for (int i = 0; i < 22; i++) { c = [c, c]; } d = ['x']; for (int i = 0; i < 22; i++) { d = [d, d]; } x = [c, 'y']; b = [d, 'z']; big = []; for (int i = 0; i < 100; i++) { big.add(b); } ";
+        assertRefused(two + "(big + 1) contains x");
+        assertRefused(two + "big.toArray() contains x");
+        assertEquals(Boolean.TRUE, run("l = [1, 2]; (l + 3) contains 3"));
+        assertEquals(Boolean.TRUE, run("l = [1, 2]; l.toArray() contains 2"));
+    }
+
+    // the cost of a comparison is bounded by the argument: a small argument needs no walk of the receiver, and addAll walks the receiver only for an argument that holds a set
+    public void testASmallArgumentOrAContainerlessAddAllDoesNotWalkTheReceiver() {
+        assertEquals(Boolean.TRUE, run("t = []; for (int i = 0; i < 10000; i++) { t.add(i); } l = []; for (int i = 0; i < 1000; i++) { l.add(t); } l.contains([1]) == false"));
+        long start = System.nanoTime();
+        assertEquals(20000, run("s = {'a': 1}.entrySet(); for (int i = 0; i < 20000; i++) { s.addAll([[i]]); } s.size() - 1"));
+        assertTrue("addAll walked its receiver", (System.nanoTime() - start) / 1_000_000 < 1500);
+    }
+
+    // a set argument hashes the members of the element it is compared with: the receiver is walked, however small the argument
+    public void testASetArgumentWalksTheReceiver() {
+        ExecutionContext context = new ExecutionContext(parserConfig, 8L * 1024 * 1024);
+        org.mvel2.execution.ExecutionArrayList<Object> kk = new org.mvel2.execution.ExecutionArrayList<>(context);
+        org.mvel2.execution.ExecutionLinkedHashSet<Object> k = new org.mvel2.execution.ExecutionLinkedHashSet<>(context);
+        k.add(kk);
+        org.mvel2.execution.ExecutionArrayList<Object> list = new org.mvel2.execution.ExecutionArrayList<>(context);
+        list.add(k);
+        kk.add(reusedList(context, 22)); // after kk is in the set, as a script can
+        kk.add(reusedList(context, 22));
+        org.mvel2.execution.ExecutionHashMap<Object, Object> other = new org.mvel2.execution.ExecutionHashMap<>(4, context);
+        other.put(1, 1);
+        try {
+            list.indexOf(other.keySet());
+            fail("expected ScriptMemoryOverflowException");
+        } catch (ScriptMemoryOverflowException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().startsWith("Max expanded size overflow"));
+        }
+    }
+
     public void testAnUnlimitedContextIsNotChecked() {
         executionContext = new ExecutionContext(parserConfig, 0);
         assertEquals(Boolean.TRUE, run("a = ['x']; for (int i = 0; i < 10; i++) { a = [a, a]; } a.toString().length() > 0"));

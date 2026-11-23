@@ -75,21 +75,34 @@ public class ExecutionHashMap<K, V> extends LinkedHashMap<K, V> implements Execu
 
     @Override
     public Set<Entry<K, V>> entrySet() {
-        Set<Entry<K, V>> executionEntries = new ExecutionLinkedHashSet<>(this.executionContext);
-        for (Entry<K, V> entry : super.entrySet()) {
-            executionEntries.add(new ExecutionEntry<>(entry.getKey(), entry.getValue(), this.executionContext));
+        // every entry is hashed as the set is filled, each entry guards only itself: the walk of this map bounds the call
+        boolean outermost = this.executionContext.beginExpansion(this);
+        try {
+            Set<Entry<K, V>> executionEntries = new ExecutionLinkedHashSet<>(this.executionContext);
+            for (Entry<K, V> entry : super.entrySet()) {
+                executionEntries.add(new ExecutionEntry<>(entry.getKey(), entry.getValue(), this.executionContext));
+            }
+            return executionEntries;
+        } finally {
+            this.executionContext.endExpansion(outermost);
         }
-        return executionEntries;
+    }
+
+    // the argument is the receiver of equals for every value: see ExecutionContext.beginCompare
+    @Override
+    public boolean containsValue(Object value) {
+        boolean outermost = this.executionContext.beginCompare(value, this, super.values());
+        try {
+            return super.containsValue(value);
+        } finally {
+            this.executionContext.endExpansion(outermost);
+        }
     }
 
     @Override
     public void putAll(Map<? extends K, ? extends V> m) {
         // every key of the argument is hashed: the walk of the argument bounds the call (keys with the same hash and different content are compared one by one inside a bucket: not bounded, ledgered)
-        // a key that holds members is compared with the existing keys of its bucket, and their members are hashed whatever the walk of the argument approved: this map is walked too
-        if (ExecutionContext.anyWalkable(m.keySet())) {
-            this.executionContext.checkExpansion(this);
-        }
-        boolean outermost = this.executionContext.beginExpansion(m);
+        boolean outermost = this.executionContext.beginStore(m, this);
         try {
             super.putAll(m);
         } finally {
@@ -309,12 +322,18 @@ public class ExecutionHashMap<K, V> extends LinkedHashMap<K, V> implements Execu
         }
     }
 
+    // every key is hashed twice, each key guards only itself: the walk of this map bounds the call
     private HashMap reversByKeys() {
-        ExecutionArrayList<K> keys = this.keys();
-        keys.reverse();
-        HashMap keysMapRevers = new LinkedHashMap();
-        keys.forEach(k -> keysMapRevers.put(k, this.get(k)));
-        return keysMapRevers;
+        boolean outermost = this.executionContext.beginExpansion(this);
+        try {
+            ExecutionArrayList<K> keys = this.keys();
+            keys.reverse();
+            HashMap keysMapRevers = new LinkedHashMap();
+            keys.forEach(k -> keysMapRevers.put(k, this.get(k)));
+            return keysMapRevers;
+        } finally {
+            this.executionContext.endExpansion(outermost);
+        }
     }
 
     private ExecutionHashMap<K, V> invertMap() {

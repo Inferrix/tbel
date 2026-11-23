@@ -38,11 +38,7 @@ public class ExecutionLinkedHashSet<E> extends LinkedHashSet<E> implements Execu
     // every element of the argument is hashed: the walk of the argument (the sum of what its elements expand to) bounds the call (elements with the same hash and different content are compared one by one inside a bucket: not bounded, ledgered)
     @Override
     public boolean addAll(Collection<? extends E> c) {
-        // an element that holds members is compared with the existing elements of its bucket, and their members are hashed whatever the walk of the argument approved: this set is walked too
-        if (ExecutionContext.anyWalkable(c)) {
-            this.executionContext.checkExpansion(this);
-        }
-        boolean outermost = this.executionContext.beginExpansion(c);
+        boolean outermost = this.executionContext.beginStore(c, this);
         try {
             return super.addAll(c);
         } finally {
