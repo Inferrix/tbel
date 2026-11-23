@@ -5,6 +5,7 @@ package org.mvel2.execution;
 import org.mvel2.ExecutionContext;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -32,6 +33,17 @@ public class ExecutionLinkedHashSet<E> extends LinkedHashSet<E> implements Execu
             return true;
         }
         return false;
+    }
+
+    // every element of the argument is hashed: the walk of the argument (the sum of what its elements expand to) bounds the call
+    @Override
+    public boolean addAll(Collection<? extends E> c) {
+        boolean outermost = this.executionContext.beginExpansion(c);
+        try {
+            return super.addAll(c);
+        } finally {
+            this.executionContext.endExpansion(outermost);
+        }
     }
 
     @Override

@@ -347,7 +347,13 @@ public class ExecutionContext implements Serializable {
         }
     }
 
-    private static boolean walkable(Object value) {
+    /** String.valueOf of an operand that an operator prints (a pattern match, a contains, the message of a failed comparison): a plain container is walked first */
+    public static String stringOf(Object value) {
+        checkOperand(value);
+        return String.valueOf(value);
+    }
+
+    public static boolean walkable(Object value) {
         return value instanceof Collection || value instanceof Map || value instanceof Map.Entry || value instanceof Object[] || value instanceof Optional
                 || value instanceof Iterable || value instanceof Iterator || value instanceof BaseStream;
     }

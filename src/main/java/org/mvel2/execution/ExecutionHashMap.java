@@ -84,7 +84,13 @@ public class ExecutionHashMap<K, V> extends LinkedHashMap<K, V> implements Execu
 
     @Override
     public void putAll(Map<? extends K, ? extends V> m) {
-        super.putAll(m);
+        // every key of the argument is hashed: the walk of the argument bounds the call
+        boolean outermost = this.executionContext.beginExpansion(m);
+        try {
+            super.putAll(m);
+        } finally {
+            this.executionContext.endExpansion(outermost);
+        }
         for (Map.Entry<? extends K, ? extends V> val : m.entrySet()) {
             this.memorySize += this.executionContext.onValAdd(this, val.getKey(), val.getValue());
         }
@@ -271,17 +277,23 @@ public class ExecutionHashMap<K, V> extends LinkedHashMap<K, V> implements Execu
         return new ExecutionHashMap<>(this.reversByKeys(), this.executionContext);
     }
 
+    // the comparator prints every value, the collector hashes every key: the walk of this map bounds the call
     private <K, V extends Comparable<? super V>> Map<K, V> sortMapByValue(Map<K, V> map, boolean asc) {
-        Comparator<? super Map.Entry> cmp;
-        if (this.values().validateClazzInArrayIsOnlyNumber()) {
-            cmp = asc ? COMP_BY_VALUE_DOUBLE_ASC : COMP_BY_VALUE_DOUBLE_DESC;
-        } else {
-            cmp = asc ? COMP_BY_VALUE_STRING_ASC : COMP_BY_VALUE_STRING_DESC;
+        boolean outermost = this.executionContext.beginExpansion(this);
+        try {
+            Comparator<? super Map.Entry> cmp;
+            if (this.values().validateClazzInArrayIsOnlyNumber()) {
+                cmp = asc ? COMP_BY_VALUE_DOUBLE_ASC : COMP_BY_VALUE_DOUBLE_DESC;
+            } else {
+                cmp = asc ? COMP_BY_VALUE_STRING_ASC : COMP_BY_VALUE_STRING_DESC;
+            }
+            return map.entrySet()
+                    .stream()
+                    .sorted(cmp)
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
+        } finally {
+            this.executionContext.endExpansion(outermost);
         }
-        return map.entrySet()
-                .stream()
-                .sorted(cmp)
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
     }
 
     private void clearAllPutAll(Map<? extends K, ? extends V> m) {

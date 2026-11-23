@@ -21,7 +21,7 @@ package org.mvel2.ast;
 import org.mvel2.ParserContext;
 import org.mvel2.integration.VariableResolverFactory;
 
-import static java.lang.String.valueOf;
+import static org.mvel2.ExecutionContext.stringOf;
 import static java.util.regex.Pattern.compile;
 import static org.mvel2.MVEL.eval;
 
@@ -36,12 +36,12 @@ public class RegExMatchNode extends ASTNode {
   }
 
   public Object getReducedValueAccelerated(Object ctx, Object thisValue, VariableResolverFactory factory) {
-    return compile(valueOf(patternNode.getReducedValueAccelerated(ctx, thisValue, factory))).matcher(valueOf(node.getReducedValueAccelerated(ctx, thisValue, factory))).matches();
+    return compile(stringOf(patternNode.getReducedValueAccelerated(ctx, thisValue, factory))).matcher(stringOf(node.getReducedValueAccelerated(ctx, thisValue, factory))).matches();
   }
 
   public Object getReducedValue(Object ctx, Object thisValue, VariableResolverFactory factory) {
-    return compile(valueOf(eval(expr, patternNode.start, patternNode.offset, ctx, factory)))
-        .matcher(valueOf(eval(expr, node.start, node.offset, ctx, factory))).matches();
+    return compile(stringOf(eval(expr, patternNode.start, patternNode.offset, ctx, factory)))
+        .matcher(stringOf(eval(expr, node.start, node.offset, ctx, factory))).matches();
   }
 
   public Class getEgressType() {

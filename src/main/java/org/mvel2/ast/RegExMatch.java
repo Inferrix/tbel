@@ -26,7 +26,7 @@ import org.mvel2.integration.VariableResolverFactory;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
-import static java.lang.String.valueOf;
+import static org.mvel2.ExecutionContext.stringOf;
 import static java.util.regex.Pattern.compile;
 import static org.mvel2.MVEL.eval;
 import static org.mvel2.util.ParseTools.subCompileExpression;
@@ -53,7 +53,7 @@ public class RegExMatch extends ASTNode {
           subCompileExpression(expr, patternStart, patternOffset, pCtx)) instanceof ExecutableLiteral) {
 
         try {
-          p = compile(valueOf(patternStmt.getValue(null, null)));
+          p = compile(stringOf(patternStmt.getValue(null, null)));
         }
         catch (PatternSyntaxException e) {
           throw new CompileException("bad regular expression", expr, patternStart, e);
@@ -65,16 +65,16 @@ public class RegExMatch extends ASTNode {
 
   public Object getReducedValueAccelerated(Object ctx, Object thisValue, VariableResolverFactory factory) {
     if (p == null) {
-      return compile(valueOf(patternStmt.getValue(ctx, thisValue, factory))).matcher(valueOf(stmt.getValue(ctx, thisValue, factory))).matches();
+      return compile(stringOf(patternStmt.getValue(ctx, thisValue, factory))).matcher(stringOf(stmt.getValue(ctx, thisValue, factory))).matches();
     }
     else {
-      return p.matcher(valueOf(stmt.getValue(ctx, thisValue, factory))).matches();
+      return p.matcher(stringOf(stmt.getValue(ctx, thisValue, factory))).matches();
     }
   }
 
   public Object getReducedValue(Object ctx, Object thisValue, VariableResolverFactory factory) {
     try {
-      return compile(valueOf(eval(expr, patternStart, patternOffset, ctx, factory))).matcher(valueOf(eval(expr, start, offset, ctx, factory))).matches();
+      return compile(stringOf(eval(expr, patternStart, patternOffset, ctx, factory))).matcher(stringOf(eval(expr, start, offset, ctx, factory))).matches();
     }
     catch (PatternSyntaxException e) {
       throw new CompileException("bad regular expression", expr, patternStart, e);

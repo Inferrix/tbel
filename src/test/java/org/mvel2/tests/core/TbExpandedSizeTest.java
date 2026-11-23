@@ -275,6 +275,59 @@ public class TbExpandedSizeTest extends TestCase {
         assertFalse(set.equals(a));
     }
 
+    private static final String DAG20_REFS = "a = ['x']; for (int i = 0; i < 20; i++) { a = [a, a]; } big = []; for (int i = 0; i < 40; i++) { big.add(a); } ";
+
+    // a copy or a view of a list is a plain java.util collection: every operator that prints its operand walks it first
+    public void testAPlainCopyOrViewIsRefusedWhereAnOperatorPrintsIt() {
+        for (String use : new String[] {"(big + 1) ~= 'x'", "'abc' contains (big + 1)", "'abc' < (big + 1)", "'abc' >= (big + 1)",
+                "m = {}; for (int i = 0; i < 40; i++) { m.put([a, i], 1); } m.keySet() ~= 'x'"}) {
+            assertRefused(DAG20_REFS + use);
+        }
+        assertEquals(Boolean.TRUE, run("l = [1, 2]; ('abc' contains (l + 3)) == false"));
+        assertEquals(Boolean.TRUE, run("l = ['a', 'b']; (l + 'c') ~= '.*'"));
+    }
+
+    // one call that compares or hashes every element is one walk: N references to one nested list are N times its expansion
+    public void testACallThatLoopsOverReusedElementsIsRefused() {
+        String x = "b = ['x']; for (int i = 0; i < 19; i++) { b = [b, b]; } x = [b, 'z']; ";
+        assertRefused(DAG20_REFS + x + "big.indexOf(x)");
+        assertRefused(DAG20_REFS + x + "big.contains(x)");
+        assertRefused(DAG20_REFS + x + "big.remove(x)");
+        assertRefused(DAG20_REFS + "m = {}; for (int i = 0; i < 40; i++) { m.put('k' + i, a); } m.sortByValue()");
+        assertRefused(DAG20_REFS + "m = {}; for (int i = 0; i < 40; i++) { m.put('k' + i, a); } m.toSortedByValue()");
+        assertRefused(DAG20_REFS + "m = {}; for (int i = 0; i < 40; i++) { m.put([a, i], 1); } n = {}; n.putAll(m)");
+        assertEquals(1, run("l = [[1, 2], [3]]; l.indexOf([3])"));
+        assertEquals(Boolean.TRUE, run("l = [[1, 2], [3]]; l.contains([3])"));
+        assertEquals(Boolean.TRUE, run("l = [1, 2, 3]; l.remove(2); l.size() == 2"));
+    }
+
+    public void testASetAddAllOfReusedElementsIsRefused() {
+        ExecutionContext context = new ExecutionContext(parserConfig, 8L * 1024 * 1024);
+        org.mvel2.execution.ExecutionArrayList<Object> a = new org.mvel2.execution.ExecutionArrayList<>(context);
+        a.add("x");
+        for (int i = 0; i < 20; i++) {
+            org.mvel2.execution.ExecutionArrayList<Object> b = new org.mvel2.execution.ExecutionArrayList<>(context);
+            context.checkAssignGlobalVariable("a", a);
+            b.add(a);
+            b.add(a);
+            a = b;
+        }
+        context.checkAssignGlobalVariable("a", a);
+        org.mvel2.execution.ExecutionArrayList<Object> big = new org.mvel2.execution.ExecutionArrayList<>(context);
+        for (int i = 0; i < 40; i++) {
+            big.add(a);
+        }
+        org.mvel2.execution.ExecutionLinkedHashSet<Object> set = new org.mvel2.execution.ExecutionLinkedHashSet<>(context);
+        long start = System.nanoTime();
+        try {
+            set.addAll(big);
+            fail("expected ScriptMemoryOverflowException");
+        } catch (ScriptMemoryOverflowException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().startsWith("Max expanded size overflow"));
+        }
+        assertTrue((System.nanoTime() - start) / 1_000_000 < 3000);
+    }
+
     public void testAnUnlimitedContextIsNotChecked() {
         executionContext = new ExecutionContext(parserConfig, 0);
         assertEquals(Boolean.TRUE, run("a = ['x']; for (int i = 0; i < 10; i++) { a = [a, a]; } a.toString().length() > 0"));

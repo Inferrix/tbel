@@ -77,7 +77,7 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 import static java.lang.Double.parseDouble;
-import static java.lang.String.valueOf;
+import static org.mvel2.ExecutionContext.stringOf;
 import static java.lang.System.arraycopy;
 import static java.lang.Thread.currentThread;
 import static java.nio.ByteBuffer.allocateDirect;
@@ -754,7 +754,7 @@ public class ParseTools {
     if (compareTo == null)
       return false;
     else if (compareTo instanceof String)
-      return ((String) compareTo).contains(valueOf(compareTest));
+      return ((String) compareTo).contains(stringOf(compareTest));
     else if (compareTo instanceof Collection)
       return ((Collection) compareTo).contains(compareTest);
     else if (compareTo instanceof Map)

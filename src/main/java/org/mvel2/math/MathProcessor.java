@@ -32,7 +32,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import static java.lang.String.valueOf;
+import static org.mvel2.ExecutionContext.stringOf;
 import static org.mvel2.DataConversion.convert;
 import static org.mvel2.DataTypes.BIG_DECIMAL;
 import static org.mvel2.DataTypes.EMPTY;
@@ -247,10 +247,10 @@ public strictfp class MathProcessor {
       // Fix for: MVEL-56
       else if ((type1 == 1 || type2 == 1) && (type1 == 8 || type1 == 112 || type2 == 8 || type2 == 112)) {
         if (type1 == 1) {
-          return doOperationNonNumeric(type1, val1, operation, valueOf(val2));
+          return doOperationNonNumeric(type1, val1, operation, stringOf(val2));
         }
         else {
-          return doOperationNonNumeric(type1, valueOf(val1), operation, val2);
+          return doOperationNonNumeric(type1, stringOf(val1), operation, val2);
         }
       }
     }
@@ -275,9 +275,7 @@ public strictfp class MathProcessor {
   }
 
   private static String concat(Object val1, Object val2) {
-    ExecutionContext.checkOperand(val1);
-    ExecutionContext.checkOperand(val2);
-    return valueOf(val1) + valueOf(val2);
+    return stringOf(val1) + stringOf(val2);
   }
 
   private static Object doOperationNonNumeric(int type1, final Object val1, final int operation, final Object val2) {
@@ -309,7 +307,7 @@ public strictfp class MathProcessor {
             return val2 != null && (((Comparable) val1).compareTo(val2) >= 1);
           }
           catch (ClassCastException e) {
-            throw new RuntimeException("uncomparable values <<" + val1 + ">> and <<" + val2 + ">>", e);
+            throw new RuntimeException("uncomparable values <<" + stringOf(val1) + ">> and <<" + stringOf(val2) + ">>", e);
           }
         }
         else {
@@ -323,7 +321,7 @@ public strictfp class MathProcessor {
             return val2 != null && ((Comparable) val1).compareTo(val2) >= 0;
           }
           catch (ClassCastException e) {
-            throw new RuntimeException("uncomparable values <<" + val1 + ">> and <<" + val2 + ">>", e);
+            throw new RuntimeException("uncomparable values <<" + stringOf(val1) + ">> and <<" + stringOf(val2) + ">>", e);
           }
 
         }
@@ -339,7 +337,7 @@ public strictfp class MathProcessor {
             return val2 != null && ((Comparable) val1).compareTo(val2) <= -1;
           }
           catch (ClassCastException e) {
-            throw new RuntimeException("uncomparable values <<" + val1 + ">> and <<" + val2 + ">>", e);
+            throw new RuntimeException("uncomparable values <<" + stringOf(val1) + ">> and <<" + stringOf(val2) + ">>", e);
           }
 
         }
@@ -354,7 +352,7 @@ public strictfp class MathProcessor {
             return val2 != null && ((Comparable) val1).compareTo(val2) <= 0;
           }
           catch (ClassCastException e) {
-            throw new RuntimeException("uncomparable values <<" + val1 + ">> and <<" + val2 + ">>", e);
+            throw new RuntimeException("uncomparable values <<" + stringOf(val1) + ">> and <<" + stringOf(val2) + ">>", e);
           }
 
         }
@@ -364,7 +362,7 @@ public strictfp class MathProcessor {
 
 
       case SOUNDEX:
-        return soundex(String.valueOf(val1)).equals(soundex(String.valueOf(val2)));
+        return soundex(stringOf(val1)).equals(soundex(stringOf(val2)));
 
       case STR_APPEND:
         return concat(val1, val2);
@@ -373,7 +371,7 @@ public strictfp class MathProcessor {
     throw new RuntimeException("could not perform numeric operation on non-numeric types: left-type="
         + (val1 != null ? val1.getClass().getName() : "null") + "; right-type="
         + (val2 != null ? val2.getClass().getName() : "null")
-        + " [vals (" + valueOf(val1) + ", " + valueOf(val2) + ") operation=" + DebugTools.getOperatorName(operation) + " (opcode:" + operation + ") ]");
+        + " [vals (" + stringOf(val1) + ", " + stringOf(val2) + ") operation=" + DebugTools.getOperatorName(operation) + " (opcode:" + operation + ") ]");
   }
 
   private static Boolean safeEquals(final Object val1, final Object val2) {

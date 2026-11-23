@@ -121,12 +121,34 @@ public class ExecutionArrayList<E> extends ArrayList<E> implements ExecutionObje
 
     @Override
     public boolean remove(Object value) {
-        int index = super.indexOf(value);
+        int index = this.indexOf(value);
         if (index >= 0) {
             this.remove(index);
             return true;
         }
         return false;
+    }
+
+    // one call compares the argument with every element: a container argument is compared as many times as there are elements, so the walk
+    // of this list (the sum of what the elements expand to) bounds the call; contains() calls indexOf()
+    @Override
+    public int indexOf(Object o) {
+        boolean outermost = ExecutionContext.walkable(o) && this.executionContext.beginExpansion(this);
+        try {
+            return super.indexOf(o);
+        } finally {
+            this.executionContext.endExpansion(outermost);
+        }
+    }
+
+    @Override
+    public int lastIndexOf(Object o) {
+        boolean outermost = ExecutionContext.walkable(o) && this.executionContext.beginExpansion(this);
+        try {
+            return super.lastIndexOf(o);
+        } finally {
+            this.executionContext.endExpansion(outermost);
+        }
     }
 
     @Override
